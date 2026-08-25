@@ -1,0 +1,105 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { Loader } from "@/components/Loader";
+import { Cursor } from "@/components/Cursor";
+import { Navbar } from "@/components/Navbar";
+import { Hero } from "@/components/Hero";
+import { SocialProof } from "@/components/SocialProof";
+import { Problem } from "@/components/Problem";
+import { Transformation } from "@/components/Transformation";
+import { FeatureBento } from "@/components/FeatureBento";
+import { NotChatbot } from "@/components/NotChatbot";
+import { Intelligence } from "@/components/Intelligence";
+import { KnowledgeGraph } from "@/components/KnowledgeGraph";
+import { Personalization } from "@/components/Personalization";
+import { Workflow } from "@/components/Workflow";
+import { StudySession } from "@/components/StudySession";
+import { Analytics } from "@/components/Analytics";
+import { DailyBriefing } from "@/components/DailyBriefing";
+import { HowItWorks } from "@/components/HowItWorks";
+import { Testimonials } from "@/components/Testimonials";
+import { Pricing } from "@/components/Pricing";
+import { FAQ } from "@/components/FAQ";
+import { FinalCTA } from "@/components/FinalCTA";
+import { Marquee } from "@/components/Marquee";
+import { Footer } from "@/components/Footer";
+import { WorkspaceTransition } from "@/components/WorkspaceTransition";
+
+const TITLE = "NEXA — Your AI Academic Agent";
+const DESCRIPTION =
+  "An AI academic agent that understands your study material, builds personalized study sessions, generates questions and helps you master what matters.";
+
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: TITLE },
+      { name: "description", content: DESCRIPTION },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESCRIPTION },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "/" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESCRIPTION },
+    ],
+    links: [{ rel: "canonical", href: "/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "NEXA",
+          applicationCategory: "EducationalApplication",
+          operatingSystem: "Web",
+          description: DESCRIPTION,
+          offers: [
+            { "@type": "Offer", price: "0", priceCurrency: "USD", name: "Free" },
+            { "@type": "Offer", price: "12", priceCurrency: "USD", name: "Pro" },
+            { "@type": "Offer", price: "24", priceCurrency: "USD", name: "Academic" },
+          ],
+        }),
+      },
+    ],
+  }),
+  component: Index,
+});
+
+function Index() {
+  const [loaded, setLoaded] = useState(false);
+  const [workspace, setWorkspace] = useState(false);
+
+  return (
+    <>
+      <Loader onDone={() => setLoaded(true)} />
+      <Cursor />
+      <Navbar />
+      <main
+        className="transition-opacity duration-1000"
+        style={{ opacity: loaded ? 1 : 0 }}
+      >
+        <Hero />
+        <SocialProof />
+        <Problem />
+        <Transformation />
+        <FeatureBento />
+        <NotChatbot />
+        <Intelligence />
+        <KnowledgeGraph />
+        <Personalization />
+        <Workflow />
+        <StudySession />
+        <Analytics />
+        <DailyBriefing />
+        <HowItWorks />
+        <Testimonials />
+        <Pricing onStart={() => setWorkspace(true)} />
+        <FAQ />
+        <FinalCTA onStart={() => setWorkspace(true)} />
+        <Marquee />
+        <Footer />
+      </main>
+      <WorkspaceTransition open={workspace} onClose={() => setWorkspace(false)} />
+    </>
+  );
+}

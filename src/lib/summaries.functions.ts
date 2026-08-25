@@ -1,0 +1,343 @@
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { summarySchema, type StudySummary } from "@/lib/summary.schema";
+import {
+  generateAiText,
+  getAiLocaleContext,
+  normalizeAiError,
+} from "@/lib/ai-gateway.server";
+import {
+  finishAiGeneration,
+  isAiGenerationInProgressError,
+  isAiDailyLimitError,
+  reserveAiGeneration,
+} from "@/lib/ai-usage-limit.server";
+import { runReservedAiGeneration } from "@/lib/ai-generation-action";
+import type { Database, Json } from "@/integrations/supabase/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Locale, PersistedContentLocale } from "@/lib/i18n";
+
+const MAX_INPUT_CHARS = 60_000;
+
+const SYSTEM_PROMPT = `You are NEXA, an academic study agent.
+You write structured study summaries based EXCLUSIVELY on the material provided by the user.
+Rules:
+- Never use outside/general knowledge. Never invent facts, numbers, names or examples.
+- Mirror the actual organisation and terminology of the material. Follow the output language requirement for user-facing content.
+- If the material is incomplete or too short to cover something, state that limitation in the "limitations" field instead of filling the gap.
+- Be concise: this is a revision aid, not a rewrite of the document.
+- The required Markdown headings are serialization tokens. Always use these exact English lines: "## Key concepts", "## Explanations", "## Definitions", "## Relationships", "## Final review", and "## Limitations".
+- CRITICAL SERIALIZATION OVERRIDE: treat those six heading lines as code literals, not prose. Copy them byte-for-byte and never translate, rename, pluralize, or alter them. Only their contents use the requested output language.`;
+
+const MARKDOWN_SUMMARY_FORMAT = `The following Markdown headings are a machine-readable serialization contract.
+Copy these six section-heading lines character-for-character: "## Key concepts", "## Explanations", "## Definitions", "## Relationships", "## Final review", and "## Limitations".
+They are fixed parser tokens, not user-facing text. Never translate, rename, pluralize, reorder, or omit them, regardless of the requested output language.
+For example, even in pt-BR, "## Conceitos-chave", "## Explicação", "## Definições", "## Relacionamentos", "## Revisão final", and "## Limitações" are invalid.
+Only the H1 title text and the content beneath the six fixed section headings should use the requested output language.
+Before returning, verify that all six canonical English heading lines are present exactly as written. Even for pt-BR, outputting "## Conceitos-chave" or any translated heading is invalid.
+
+Return markdown using exactly these sections:
+# localized title
+## Key concepts
+- concept
+## Explanations
+### heading
+body
+## Definitions
+- term: definition
+## Relationships
+- relationship
+## Final review
+short review paragraph
+## Limitations
+limitation or "None"`;
+
+function cleanMarkdown(value: string) {
+  return value
+    .replace(/^```(?:markdown|md)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function stripMarkdown(value: string) {
+  return value
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
+function normalizeSummaryHeadings(markdown: string) {
+  const aliases: Array<[RegExp, string]> = [
+    [/^##\s*(?:Key concepts|Conceitos[- ]?chave)\s*$/i, "## Key concepts"],
+    [/^##\s*(?:Explanations|Explica(?:ç(?:ão|ões)|c(?:ao|oes)))\s*$/i, "## Explanations"],
+    [/^##\s*(?:Definitions|Defini(?:ç(?:ão|ões)|c(?:ao|oes)))\s*$/i, "## Definitions"],
+    [/^##\s*(?:Relationships|Relacionamentos)\s*$/i, "## Relationships"],
+    [/^##\s*(?:Final review|Revis(?:ão|ao) final)\s*$/i, "## Final review"],
+    [/^##\s*(?:Limitations|Limita(?:ç(?:ão|ões)|c(?:ao|oes)))\s*$/i, "## Limitations"],
+  ];
+
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => aliases.find(([pattern]) => pattern.test(line.trim()))?.[1] ?? line)
+    .join("\n");
+}
+
+function section(markdown: string, heading: string) {
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex(
+    (line) => line.trim().toLowerCase() === `## ${heading.toLowerCase()}`,
+  );
+  if (start === -1) return "";
+
+  const end = lines.findIndex((line, index) => index > start && /^##\s+/.test(line.trim()));
+  return lines
+    .slice(start + 1, end === -1 ? undefined : end)
+    .join("\n")
+    .trim();
+}
+
+function bulletItems(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean)
+    .map(stripMarkdown);
+}
+
+function paragraph(value: string) {
+  return stripMarkdown(
+    value
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s+/, "").trim())
+      .filter(Boolean)
+      .join("\n"),
+  );
+}
+
+function parseExplanationSection(value: string): StudySummary["explanations"] {
+  const lines = value.split(/\r?\n/);
+  const items: StudySummary["explanations"] = [];
+  let current: { heading: string; body: string[] } | null = null;
+
+  for (const line of lines) {
+    const heading = /^###\s+(.+?)\s*$/.exec(line.trim())?.[1];
+    if (heading) {
+      if (current)
+        items.push({ heading: current.heading, body: paragraph(current.body.join("\n")) });
+      current = { heading: stripMarkdown(heading), body: [] };
+    } else if (current) {
+      current.body.push(line);
+    }
+  }
+
+  if (current) items.push({ heading: current.heading, body: paragraph(current.body.join("\n")) });
+
+  if (items.length > 0) {
+    return items.filter((item) => item.heading && item.body).slice(0, 8);
+  }
+
+  return bulletItems(value)
+    .map((item) => {
+      const [heading, ...body] = item.split(":");
+      return { heading: heading?.trim() ?? "", body: body.join(":").trim() };
+    })
+    .filter((item) => item.heading && item.body)
+    .slice(0, 8);
+}
+
+function parseDefinitionSection(value: string): StudySummary["definitions"] {
+  return bulletItems(value)
+    .map((item) => {
+      const [term, ...definition] = item.split(":");
+      return { term: term?.trim() ?? "", definition: definition.join(":").trim() };
+    })
+    .filter((item) => item.term && item.definition)
+    .slice(0, 10);
+}
+
+function parseMarkdownSummary(markdown: string, fallbackTitle: string): StudySummary {
+  const content = cleanMarkdown(normalizeSummaryHeadings(markdown));
+  const title = stripMarkdown(/^#\s+(.+?)\s*$/m.exec(content)?.[1] ?? fallbackTitle);
+  const limitations = paragraph(section(content, "Limitations"));
+
+  return summarySchema.parse({
+    title,
+    keyConcepts: bulletItems(section(content, "Key concepts")).slice(0, 10),
+    explanations: parseExplanationSection(section(content, "Explanations")),
+    definitions: parseDefinitionSection(section(content, "Definitions")),
+    relationships: bulletItems(section(content, "Relationships")).slice(0, 8),
+    review: paragraph(section(content, "Final review")) || paragraph(content),
+    limitations: limitations && !/^none$/i.test(limitations) ? limitations : null,
+  });
+}
+
+type SummaryVariant = {
+  id: string;
+  locale: PersistedContentLocale;
+  createdAt: string;
+  updatedAt: string;
+  summary: StudySummary;
+};
+
+function mapSummaryVariant(row: {
+  id: string;
+  locale: string;
+  created_at: string;
+  updated_at: string;
+  content: Json;
+}): SummaryVariant {
+  return {
+    id: row.id,
+    locale: row.locale as PersistedContentLocale,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    summary: row.content as unknown as StudySummary,
+  };
+}
+
+async function loadSummaryVariant(
+  supabase: SupabaseClient<Database>,
+  documentId: string,
+  locale: Locale,
+) {
+  const { data, error } = await supabase
+    .from("summaries")
+    .select("id, locale, content, created_at, updated_at")
+    .eq("document_id", documentId)
+    .eq("locale", locale)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapSummaryVariant(data) : null;
+}
+
+async function waitForSummary(
+  supabase: SupabaseClient<Database>,
+  documentId: string,
+  locale: Locale,
+  previousUpdatedAt: string | null,
+) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const summary = await loadSummaryVariant(supabase, documentId, locale);
+    if (summary && summary.updatedAt !== previousUpdatedAt) return summary;
+  }
+  return null;
+}
+
+export const getDocumentSummary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { locale } = await getAiLocaleContext(supabase);
+    const { data: rows, error } = await supabase
+      .from("summaries")
+      .select("id, locale, content, created_at, updated_at")
+      .eq("document_id", data.documentId)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    const variants = (rows ?? []).map(mapSummaryVariant);
+    return {
+      requestedLocale: locale,
+      current: variants.find((variant) => variant.locale === locale) ?? null,
+      alternatives: variants.filter((variant) => variant.locale !== locale),
+    };
+  });
+
+export const generateDocumentSummary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) =>
+    z.object({ documentId: z.string().uuid(), regenerate: z.boolean().optional() }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const localeContext = await getAiLocaleContext(supabase);
+
+    // RLS already scopes rows to the caller; the explicit user check is a second gate.
+    const { data: doc, error: docError } = await supabase
+      .from("documents")
+      .select("id, title, user_id, status, extracted_text")
+      .eq("id", data.documentId)
+      .maybeSingle();
+
+    if (docError || !doc) {
+      throw new Error("Document not found.");
+    }
+
+    const documentRow = doc!;
+    if (documentRow.user_id !== userId) {
+      throw new Error("Document not found.");
+    }
+
+    const extractedText = documentRow.extracted_text;
+    if (!extractedText || extractedText!.trim().length < 200) {
+      throw new Error(
+        "This document has no readable extracted text yet. Process the PDF before generating a summary.",
+      );
+    }
+    const summaryText = extractedText!;
+
+    const existing = await loadSummaryVariant(supabase, documentRow.id, localeContext.locale);
+    if (!data.regenerate) {
+      if (existing) {
+        return {
+          reused: true as const,
+          ...existing,
+        };
+      }
+    }
+
+    try {
+      const saved = await runReservedAiGeneration({
+        reserve: () =>
+          reserveAiGeneration(supabase, "summary", documentRow.id, localeContext.locale),
+        generate: () =>
+          generateAiText({
+            system: SYSTEM_PROMPT,
+            prompt: `Document title: ${documentRow.title}\n\nMATERIAL (the only allowed source):\n"""\n${summaryText.slice(0, MAX_INPUT_CHARS)}\n"""\n\nProduce the structured study summary.`,
+            outputFormat: MARKDOWN_SUMMARY_FORMAT,
+            languageInstruction: localeContext.languageInstruction,
+          }),
+        afterGenerate: async (result) => {
+          const output = parseMarkdownSummary(result.text, documentRow.title);
+          const { data: summaryId, error: saveError } = await supabase.rpc(
+            "save_summary_version",
+            {
+              p_document_id: documentRow.id,
+              p_locale: localeContext.locale,
+              p_title: output.title || documentRow.title,
+              p_content: output as unknown as Json,
+              p_model: result.model,
+            },
+          );
+          if (saveError || !summaryId) {
+            throw new Error(saveError?.message ?? "The summary was generated but couldn't be saved.");
+          }
+          const persisted = await loadSummaryVariant(
+            supabase,
+            documentRow.id,
+            localeContext.locale,
+          );
+          if (!persisted) throw new Error("The summary was generated but couldn't be loaded.");
+          return persisted;
+        },
+        finish: (reservation, status) => finishAiGeneration(supabase, reservation.id, status),
+      });
+      return { reused: false as const, ...saved };
+    } catch (error) {
+      if (isAiDailyLimitError(error)) throw error;
+      if (isAiGenerationInProgressError(error)) {
+        const saved = await waitForSummary(
+          supabase,
+          documentRow.id,
+          localeContext.locale,
+          existing?.updatedAt ?? null,
+        );
+        if (saved) return { reused: true as const, ...saved };
+        throw new Error("Summary generation is already in progress. Please try again shortly.");
+      }
+      throw normalizeAiError(error, "The AI couldn't generate a summary for this material.");
+    }
+  });

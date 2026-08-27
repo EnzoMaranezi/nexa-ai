@@ -100,6 +100,56 @@ export type Database = {
         }
         Relationships: []
       }
+      document_topics: {
+        Row: {
+          created_at: string
+          description: string
+          discovery_model: string | null
+          document_id: string
+          id: string
+          position: number
+          source_hash: string
+          source_ranges: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          discovery_model?: string | null
+          document_id: string
+          id?: string
+          position: number
+          source_hash: string
+          source_ranges: Json
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          discovery_model?: string | null
+          document_id?: string
+          id?: string
+          position?: number
+          source_hash?: string
+          source_ranges?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_topics_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       flashcard_sets: {
         Row: { created_at: string; document_id: string; id: string; locale: string; model: string | null; updated_at: string; user_id: string }
         Insert: { created_at?: string; document_id: string; id?: string; locale: string; model?: string | null; updated_at?: string; user_id: string }
@@ -294,6 +344,15 @@ export type Database = {
       create_flashcard_set_with_cards: {
         Args: { p_cards: Json; p_document_id: string; p_locale: string; p_model: string | null }
         Returns: string
+      }
+      create_document_topics: {
+        Args: {
+          p_discovery_model: string | null
+          p_document_id: string
+          p_source_hash: string
+          p_topics: Json
+        }
+        Returns: Database["public"]["Tables"]["document_topics"]["Row"][]
       }
       create_question_set_version: {
         Args: {

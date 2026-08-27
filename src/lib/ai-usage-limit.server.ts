@@ -1,9 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { AI_DAILY_LIMIT_REACHED, AI_GENERATION_IN_PROGRESS } from "@/lib/ai-errors";
-import type { Locale } from "@/lib/i18n";
+import type { PersistedContentLocale } from "@/lib/i18n";
 
-export type AiGenerationKind = "summary" | "questions" | "practice_questions" | "flashcards";
+export type AiGenerationKind =
+  | "summary"
+  | "questions"
+  | "practice_questions"
+  | "flashcards"
+  | "topic_discovery";
 
 export interface AiGenerationReservation {
   id: string;
@@ -40,7 +45,7 @@ export async function reserveAiGeneration(
   supabase: SupabaseClient<Database>,
   kind: AiGenerationKind,
   documentId: string,
-  locale: Locale,
+  locale: PersistedContentLocale,
 ): Promise<AiGenerationReservation> {
   const { data, error } = await supabase.rpc("reserve_ai_generation", {
     p_kind: kind,

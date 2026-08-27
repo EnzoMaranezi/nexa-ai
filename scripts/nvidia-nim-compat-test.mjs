@@ -430,7 +430,8 @@ function selectModel(models) {
 
   const ids = models.map(modelId).filter(Boolean);
   const preferences = [
-    /^meta\/llama-3\.3-70b-instruct$/i,
+    /^openai\/gpt-oss-20b$/i,
+    /^openai\/gpt-oss-120b$/i,
     /^nvidia\/llama-3\.3-nemotron-super-49b/i,
     /^nvidia\/llama-3\.1-nemotron-70b-instruct/i,
     /^meta\/llama-3\.1-70b-instruct/i,
@@ -447,7 +448,7 @@ function selectModel(models) {
       /(?:instruct|chat)/i.test(id) &&
       !/(?:embed|rerank|guard|moderation|classif|safety)/i.test(id),
   );
-  return fallback ?? "meta/llama-3.3-70b-instruct";
+  return fallback ?? "openai/gpt-oss-20b";
 }
 
 async function chatCompletion(apiKey, model, { label, system, prompt, maxTokens }) {
@@ -574,6 +575,33 @@ if (!modelsResponse.ok) {
 
 const models = Array.isArray(modelsResponse.json?.data) ? modelsResponse.json.data : [];
 const scriptArgs = process.argv.slice(2);
+const compatibleModelIds = models
+  .map(modelId)
+  .filter(
+    (id) =>
+      typeof id === "string" &&
+      /(?:instruct|chat)/i.test(id) &&
+      !/(?:embed|rerank|guard|moderation|classif|safety|vision|vl|image)/i.test(id),
+  )
+  .sort();
+if (scriptArgs.includes("--list-only")) {
+  console.log(
+    JSON.stringify(
+      {
+        test: "models",
+        ok: true,
+        status: modelsResponse.status,
+        discoveredModels: models.length,
+        allModelIds: models.map(modelId).filter(Boolean).sort(),
+        compatibleModelIds,
+        rateLimitHeaders: modelsResponse.rateLimitHeaders,
+      },
+      null,
+      2,
+    ),
+  );
+  process.exit(0);
+}
 const selectedModel =
   scriptArgs.find((argument) => !argument.startsWith("--")) ?? selectModel(models);
 const summaryLocale = scriptArgs.includes("--summary-locale=en") ? "en" : "pt-BR";

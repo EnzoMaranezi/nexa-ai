@@ -31,7 +31,7 @@ test("does not call a provider or finish a reservation when quota reservation fa
   assert.equal(finished, false);
 });
 
-test("uses one reservation when provider fallback succeeds", async () => {
+test("uses one reservation when an EOL provider falls back successfully", async () => {
   let reservations = 0;
   const finished: string[] = [];
   const called: string[] = [];
@@ -46,7 +46,7 @@ test("uses one reservation when provider fallback succeeds", async () => {
         generate: async (attempt) => {
           called.push(attempt.label);
           if (attempt.label === "nvidia-primary") {
-            throw Object.assign(new Error("capacity"), { statusCode: 503 });
+            throw Object.assign(new Error("model reached end of life"), { statusCode: 410 });
           }
           return "generated text";
         },

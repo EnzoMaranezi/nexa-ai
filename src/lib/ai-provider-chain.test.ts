@@ -7,8 +7,8 @@ import {
 } from "./ai-provider-chain.ts";
 
 const attempts: AiProviderAttempt[] = [
-  { provider: "nvidia", model: "meta/llama-3.1-8b-instruct", label: "nvidia-primary" },
-  { provider: "nvidia", model: "meta/llama-3.3-70b-instruct", label: "nvidia-fallback" },
+  { provider: "nvidia", model: "openai/gpt-oss-20b", label: "nvidia-primary" },
+  { provider: "nvidia", model: "openai/gpt-oss-120b", label: "nvidia-fallback" },
   { provider: "openrouter", model: "configured-model", label: "openrouter-fallback" },
 ];
 
@@ -53,6 +53,23 @@ test("uses NVIDIA fallback when the primary model is not found", async () => {
     generate: async (attempt) => {
       called.push(attempt.label);
       if (attempt.label === "nvidia-primary") throw providerError(404, "Not Found");
+      return "nvidia fallback output";
+    },
+  });
+
+  assert.equal(result, "nvidia fallback output");
+  assert.deepEqual(called, ["nvidia-primary", "nvidia-fallback"]);
+});
+
+test("uses NVIDIA fallback when the primary model has reached end of life", async () => {
+  const called: string[] = [];
+  const result = await runAiProviderChain({
+    attempts,
+    generate: async (attempt) => {
+      called.push(attempt.label);
+      if (attempt.label === "nvidia-primary") {
+        throw providerError(410, "Model reached end of life and is no longer available");
+      }
       return "nvidia fallback output";
     },
   });

@@ -11,8 +11,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
 const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
-const NVIDIA_PRIMARY_MODEL = "meta/llama-3.1-8b-instruct";
-const NVIDIA_FALLBACK_MODEL = "meta/llama-3.3-70b-instruct";
+const NVIDIA_PRIMARY_MODEL = "openai/gpt-oss-20b";
+const NVIDIA_FALLBACK_MODEL = "openai/gpt-oss-120b";
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 type AiGenerationRequest = {

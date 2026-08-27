@@ -27,6 +27,7 @@ export function isEligibleProviderFallback(error: unknown) {
   if (
     statusCode !== undefined &&
     (statusCode === 404 ||
+      statusCode === 410 ||
       statusCode === 408 ||
       statusCode === 409 ||
       statusCode === 425 ||
@@ -37,7 +38,7 @@ export function isEligibleProviderFallback(error: unknown) {
   }
 
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return /(?:model|provider).*(?:unavailable|not available|not found)|no available provider|capacity|overload|temporar(?:y|ily)|timeout|timed out|abort(?:ed)?|connection|connect|socket|econnreset|econnrefused|fetch failed|free model/i.test(
+  return /(?:model|provider).*(?:unavailable|not available|not found|no longer available|end of life|deprecated|gone)|no available provider|capacity|overload|temporar(?:y|ily)|timeout|timed out|abort(?:ed)?|connection|connect|socket|econnreset|econnrefused|fetch failed|free model/i.test(
     message,
   );
 }

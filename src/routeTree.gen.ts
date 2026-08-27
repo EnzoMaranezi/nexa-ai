@@ -26,6 +26,8 @@ import { Route as AppQuestionsDocumentIdRouteImport } from './routes/app.questio
 import { Route as AppSessionsIndexRouteImport } from './routes/app.sessions.index'
 import { Route as AppSessionsSessionIdRouteImport } from './routes/app.sessions.$sessionId'
 import { Route as AppSummaryDocumentIdRouteImport } from './routes/app.summary.$documentId'
+import { Route as AppMaterialsDocumentIdTopicsRouteImport } from './routes/app.materials_.$documentId.topics'
+import { Route as AppMaterialsDocumentIdTopicsTopicIdRouteImport } from './routes/app.materials_.$documentId.topics_.$topicId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -112,6 +114,18 @@ const AppSummaryDocumentIdRoute = AppSummaryDocumentIdRouteImport.update({
   path: '/summary/$documentId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppMaterialsDocumentIdTopicsRoute =
+  AppMaterialsDocumentIdTopicsRouteImport.update({
+    id: '/materials_/$documentId/topics',
+    path: '/materials/$documentId/topics',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppMaterialsDocumentIdTopicsTopicIdRoute =
+  AppMaterialsDocumentIdTopicsTopicIdRouteImport.update({
+    id: '/materials_/$documentId/topics_/$topicId',
+    path: '/materials/$documentId/topics/$topicId',
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -131,6 +145,8 @@ export interface FileRoutesByFullPath {
   '/app/sessions/$sessionId': typeof AppSessionsSessionIdRoute
   '/app/summary/$documentId': typeof AppSummaryDocumentIdRoute
   '/app/sessions/': typeof AppSessionsIndexRoute
+  '/app/materials/$documentId/topics': typeof AppMaterialsDocumentIdTopicsRoute
+  '/app/materials/$documentId/topics/$topicId': typeof AppMaterialsDocumentIdTopicsTopicIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -149,6 +165,8 @@ export interface FileRoutesByTo {
   '/app/sessions/$sessionId': typeof AppSessionsSessionIdRoute
   '/app/summary/$documentId': typeof AppSummaryDocumentIdRoute
   '/app/sessions': typeof AppSessionsIndexRoute
+  '/app/materials/$documentId/topics': typeof AppMaterialsDocumentIdTopicsRoute
+  '/app/materials/$documentId/topics/$topicId': typeof AppMaterialsDocumentIdTopicsTopicIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -169,6 +187,8 @@ export interface FileRoutesById {
   '/app/sessions/$sessionId': typeof AppSessionsSessionIdRoute
   '/app/summary/$documentId': typeof AppSummaryDocumentIdRoute
   '/app/sessions/': typeof AppSessionsIndexRoute
+  '/app/materials_/$documentId/topics': typeof AppMaterialsDocumentIdTopicsRoute
+  '/app/materials_/$documentId/topics_/$topicId': typeof AppMaterialsDocumentIdTopicsTopicIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -190,6 +210,8 @@ export interface FileRouteTypes {
     | '/app/sessions/$sessionId'
     | '/app/summary/$documentId'
     | '/app/sessions/'
+    | '/app/materials/$documentId/topics'
+    | '/app/materials/$documentId/topics/$topicId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -208,6 +230,8 @@ export interface FileRouteTypes {
     | '/app/sessions/$sessionId'
     | '/app/summary/$documentId'
     | '/app/sessions'
+    | '/app/materials/$documentId/topics'
+    | '/app/materials/$documentId/topics/$topicId'
   id:
     | '__root__'
     | '/'
@@ -227,6 +251,8 @@ export interface FileRouteTypes {
     | '/app/sessions/$sessionId'
     | '/app/summary/$documentId'
     | '/app/sessions/'
+    | '/app/materials_/$documentId/topics'
+    | '/app/materials_/$documentId/topics_/$topicId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -357,6 +383,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSummaryDocumentIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/materials_/$documentId/topics': {
+      id: '/app/materials_/$documentId/topics'
+      path: '/materials/$documentId/topics'
+      fullPath: '/app/materials/$documentId/topics'
+      preLoaderRoute: typeof AppMaterialsDocumentIdTopicsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/materials_/$documentId/topics_/$topicId': {
+      id: '/app/materials_/$documentId/topics_/$topicId'
+      path: '/materials/$documentId/topics/$topicId'
+      fullPath: '/app/materials/$documentId/topics/$topicId'
+      preLoaderRoute: typeof AppMaterialsDocumentIdTopicsTopicIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -374,6 +414,8 @@ interface AppRouteChildren {
   AppSessionsSessionIdRoute: typeof AppSessionsSessionIdRoute
   AppSummaryDocumentIdRoute: typeof AppSummaryDocumentIdRoute
   AppSessionsIndexRoute: typeof AppSessionsIndexRoute
+  AppMaterialsDocumentIdTopicsRoute: typeof AppMaterialsDocumentIdTopicsRoute
+  AppMaterialsDocumentIdTopicsTopicIdRoute: typeof AppMaterialsDocumentIdTopicsTopicIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -390,6 +432,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppSessionsSessionIdRoute: AppSessionsSessionIdRoute,
   AppSummaryDocumentIdRoute: AppSummaryDocumentIdRoute,
   AppSessionsIndexRoute: AppSessionsIndexRoute,
+  AppMaterialsDocumentIdTopicsRoute: AppMaterialsDocumentIdTopicsRoute,
+  AppMaterialsDocumentIdTopicsTopicIdRoute:
+    AppMaterialsDocumentIdTopicsTopicIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

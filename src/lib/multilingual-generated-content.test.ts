@@ -126,7 +126,7 @@ test("unfinished sessions remain bound to their exact set and require explicit c
 test("all three UIs reload on locale changes and require explicit generation", () => {
   for (const source of [summaryUi, questionsUi, flashcardsUi]) {
     assert.match(source, /GeneratedContentLanguageState/);
-    assert.match(source, /\[documentId, locale\]/);
+    assert.match(source, /\[documentId, locale(?:, [^\]]+)?\]/);
     assert.doesNotMatch(source, /useEffect\([\s\S]{0,500}generate\(/);
   }
 });

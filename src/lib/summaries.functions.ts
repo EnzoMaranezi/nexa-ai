@@ -16,7 +16,9 @@ import {
 import { runReservedAiGeneration } from "@/lib/ai-generation-action";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Locale, PersistedContentLocale } from "@/lib/i18n";
+import { getUserLocale, type Locale, type PersistedContentLocale } from "@/lib/i18n";
+import { runBoundedServerOperation } from "@/lib/bounded-server-operation";
+import { resolveSummaryAvailability } from "@/lib/summary-availability";
 
 const MAX_INPUT_CHARS = 60_000;
 
@@ -230,20 +232,20 @@ export const getDocumentSummary = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { locale } = await getAiLocaleContext(supabase);
-    const { data: rows, error } = await supabase
-      .from("summaries")
-      .select("id, locale, content, created_at, updated_at")
-      .eq("document_id", data.documentId)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    const { supabase, claims } = context;
+    const locale = getUserLocale(claims.user_metadata as Record<string, unknown> | undefined);
+    const rows = await runBoundedServerOperation(async (signal) => {
+      const { data: summaryRows, error } = await supabase
+        .from("summaries")
+        .select("id, locale, content, created_at, updated_at")
+        .eq("document_id", data.documentId)
+        .order("created_at", { ascending: false })
+        .abortSignal(signal);
+      if (error) throw new Error(error.message);
+      return summaryRows;
+    });
     const variants = (rows ?? []).map(mapSummaryVariant);
-    return {
-      requestedLocale: locale,
-      current: variants.find((variant) => variant.locale === locale) ?? null,
-      alternatives: variants.filter((variant) => variant.locale !== locale),
-    };
+    return resolveSummaryAvailability(variants, locale);
   });
 
 export const generateDocumentSummary = createServerFn({ method: "POST" })

@@ -2,17 +2,15 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { SessionAnswer, StudyQuestion } from "@/lib/questions.schema";
+import { runBoundedServerOperation } from "@/lib/bounded-server-operation";
+import {
+  buildProgressOverview,
+  type ProgressOverview,
+  type ProgressSessionRow,
+  type StudySessionListItem,
+} from "@/lib/progress-overview";
 
-export interface StudySessionListItem {
-  id: string;
-  documentId: string;
-  documentTitle: string | null;
-  totalQuestions: number;
-  correctAnswers: number;
-  incorrectAnswers: number;
-  accuracy: number;
-  completedAt: string | null;
-}
+export type { ProgressOverview, StudySessionListItem } from "@/lib/progress-overview";
 
 /** All completed sessions of the caller, most recent first (RLS scopes to owner). */
 export const listStudySessions = createServerFn({ method: "POST" })
@@ -44,117 +42,44 @@ export const listStudySessions = createServerFn({ method: "POST" })
     });
   });
 
-export interface ProgressOverview {
-  totalSessions: number;
-  totalQuestions: number;
-  totalCorrect: number;
-  /** total correct / total answered — never an average of session percentages. */
-  overallAccuracy: number;
-  materialsStudied: number;
-  materialsTotal: number;
-  activeSession: StudySessionListItem | null;
-  recent: StudySessionListItem[];
-  perMaterial: {
-    documentId: string;
-    documentTitle: string | null;
-    sessions: number;
-    totalQuestions: number;
-    totalCorrect: number;
-    accuracy: number;
-  }[];
-}
-
 export const getProgressOverview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<ProgressOverview> => {
     const { supabase } = context;
 
-    const [sessionsRes, activeRes, docsRes] = await Promise.all([
-      supabase
-        .from("question_sessions")
-        .select(
-          "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title)",
-        )
-        .not("completed_at", "is", null)
-        .order("completed_at", { ascending: false }),
-      supabase
-        .from("question_sessions")
-        .select(
-          "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title)",
-        )
-        .is("completed_at", null)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase.from("documents").select("id", { count: "exact", head: true }),
-    ]);
+    const [sessionsRes, activeRes, docsRes] = await runBoundedServerOperation((signal) =>
+      Promise.all([
+        supabase
+          .from("question_sessions")
+          .select(
+            "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title)",
+          )
+          .not("completed_at", "is", null)
+          .order("completed_at", { ascending: false })
+          .abortSignal(signal),
+        supabase
+          .from("question_sessions")
+          .select(
+            "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title)",
+          )
+          .is("completed_at", null)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .abortSignal(signal)
+          .maybeSingle(),
+        supabase.from("documents").select("id", { count: "exact", head: true }).abortSignal(signal),
+      ]),
+    );
 
     if (sessionsRes.error) throw new Error(sessionsRes.error.message);
     if (activeRes.error) throw new Error(activeRes.error.message);
+    if (docsRes.error) throw new Error(docsRes.error.message);
 
-    const sessions: StudySessionListItem[] = (sessionsRes.data ?? []).map((row) => {
-      const doc = row.documents as { title: string } | null;
-      return {
-        id: row.id,
-        documentId: row.document_id,
-        documentTitle: doc?.title ?? null,
-        totalQuestions: row.total_questions,
-        correctAnswers: row.correct_answers,
-        incorrectAnswers: Math.max(row.total_questions - row.correct_answers, 0),
-        accuracy: Number(row.accuracy),
-        completedAt: row.completed_at,
-      };
-    });
-
-    const totalQuestions = sessions.reduce((sum, s) => sum + s.totalQuestions, 0);
-    const totalCorrect = sessions.reduce((sum, s) => sum + s.correctAnswers, 0);
-
-    const byMaterial = new Map<string, ProgressOverview["perMaterial"][number]>();
-    for (const s of sessions) {
-      const entry = byMaterial.get(s.documentId) ?? {
-        documentId: s.documentId,
-        documentTitle: s.documentTitle,
-        sessions: 0,
-        totalQuestions: 0,
-        totalCorrect: 0,
-        accuracy: 0,
-      };
-      entry.sessions += 1;
-      entry.totalQuestions += s.totalQuestions;
-      entry.totalCorrect += s.correctAnswers;
-      entry.accuracy =
-        entry.totalQuestions > 0
-          ? Math.round((entry.totalCorrect / entry.totalQuestions) * 100)
-          : 0;
-      byMaterial.set(s.documentId, entry);
-    }
-
-    return {
-      totalSessions: sessions.length,
-      totalQuestions,
-      totalCorrect,
-      overallAccuracy:
-        totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0,
-      materialsStudied: byMaterial.size,
+    return buildProgressOverview({
+      completedRows: (sessionsRes.data ?? []) as ProgressSessionRow[],
+      activeRow: activeRes.data as ProgressSessionRow | null,
       materialsTotal: docsRes.count ?? 0,
-      activeSession: activeRes.data
-        ? {
-            id: activeRes.data.id,
-            documentId: activeRes.data.document_id,
-            documentTitle: (activeRes.data.documents as { title: string } | null)?.title ?? null,
-            totalQuestions: activeRes.data.total_questions,
-            correctAnswers: activeRes.data.correct_answers,
-            incorrectAnswers: Math.max(
-              activeRes.data.total_questions - activeRes.data.correct_answers,
-              0,
-            ),
-            accuracy: Number(activeRes.data.accuracy),
-            completedAt: activeRes.data.completed_at,
-          }
-        : null,
-      recent: sessions.slice(0, 5),
-      perMaterial: [...byMaterial.values()].sort((a, b) => b.sessions - a.sessions),
-    };
+    });
   });
 
 export interface StudySessionDetail extends StudySessionListItem {

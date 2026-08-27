@@ -54,7 +54,7 @@ function Progress() {
     return (
       <div className="mx-auto max-w-[1100px]">
         <ErrorState
-          body={error instanceof Error ? error.message : t("progress.loadError")}
+          body={t("progress.loadError")}
           onRetry={() => void refetch()}
         />
       </div>

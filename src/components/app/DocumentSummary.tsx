@@ -24,6 +24,8 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
     summary: StudySummary;
   }>>([]);
   const [checking, setChecking] = useState(true);
+  const [lookupAttempt, setLookupAttempt] = useState(0);
+  const [lookupError, setLookupError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,6 +37,7 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
     setSummary(null);
     setCurrentAvailable(false);
     setAlternatives([]);
+    setLookupError(false);
     getDocumentSummary({ data: { documentId } })
       .then((res) => {
         if (cancelled) return;
@@ -43,15 +46,17 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
           setSummary(res.current.summary);
           setCurrentAvailable(true);
         }
-        setChecking(false);
       })
       .catch(() => {
+        if (!cancelled) setLookupError(true);
+      })
+      .finally(() => {
         if (!cancelled) setChecking(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [documentId, locale]);
+  }, [documentId, locale, lookupAttempt]);
 
   async function generate(regenerate = false) {
     setLoading(true);
@@ -79,7 +84,7 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
             : t("summary.ready")}
       </p>
 
-      {!checking && (
+      {!checking && !lookupError && (
         <div className="mt-6 flex flex-wrap gap-3">
           {!summary && alternatives.length === 0 ? (
             <PrimaryButton onClick={() => generate(false)} disabled={loading}>
@@ -99,7 +104,16 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
         </div>
       )}
 
-      {!checking && !currentAvailable && alternatives.length > 0 ? (
+      {!checking && lookupError ? (
+        <div className="mt-6 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-4">
+          <p role="alert" className="text-sm">{t("summary.loadError")}</p>
+          <GhostButton className="mt-4" onClick={() => setLookupAttempt((value) => value + 1)}>
+            {t("common.retry")}
+          </GhostButton>
+        </div>
+      ) : null}
+
+      {!checking && !lookupError && !currentAvailable && alternatives.length > 0 ? (
         <GeneratedContentLanguageState
           currentLocale={locale}
           variants={alternatives}

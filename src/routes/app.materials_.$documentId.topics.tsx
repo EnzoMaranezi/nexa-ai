@@ -2,7 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, FileText } from "lucide-react";
 import { AppCard, AppLabel, ErrorState, PrimaryButton, Skeleton } from "@/components/app/ui";
-import { AI_DAILY_LIMIT_REACHED, AI_PROVIDERS_UNAVAILABLE } from "@/lib/ai-errors";
+import {
+  AI_DAILY_LIMIT_REACHED,
+  AI_GENERATION_IN_PROGRESS,
+  AI_PROVIDERS_UNAVAILABLE,
+} from "@/lib/ai-errors";
 import {
   discoverDocumentTopics,
   getDocumentTopics,
@@ -10,6 +14,7 @@ import {
   TOPIC_DOCUMENT_NOT_FOUND,
   TOPIC_OUTPUT_INVALID,
   TOPIC_PERSISTENCE_FAILED,
+  waitForDocumentTopics,
   type StoredDocumentTopic,
 } from "@/lib/document-topics.functions";
 import { useI18n } from "@/lib/i18n";
@@ -32,7 +37,7 @@ function localizedError(error: unknown, t: (key: string) => string) {
   if (message.includes(TOPIC_PERSISTENCE_FAILED)) return t("topics.persistenceError");
   if (message.includes(AI_DAILY_LIMIT_REACHED)) return t("ai.limitReached");
   if (message.includes(AI_PROVIDERS_UNAVAILABLE)) return t("ai.providersUnavailable");
-  if (message.includes("AI_GENERATION_IN_PROGRESS")) return t("topics.inProgress");
+  if (message.includes(AI_GENERATION_IN_PROGRESS)) return t("topics.inProgress");
   return t("topics.genericError");
 }
 
@@ -42,6 +47,7 @@ function DocumentTopicsPage() {
   const [state, setState] = useState<TopicsState | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
@@ -63,7 +69,20 @@ function DocumentTopicsPage() {
       const result = await discoverDocumentTopics({ data: { documentId } });
       setState({ document: result.document, sourceState: "ready", topics: result.topics });
     } catch (cause) {
-      setError(localizedError(cause, t));
+      const message = cause instanceof Error ? cause.message : "";
+      if (message.includes(AI_GENERATION_IN_PROGRESS)) {
+        setWaiting(true);
+        try {
+          const result = await waitForDocumentTopics({ data: { documentId } });
+          setState({ document: result.document, sourceState: "ready", topics: result.topics });
+        } catch (waitCause) {
+          setError(localizedError(waitCause, t));
+        } finally {
+          setWaiting(false);
+        }
+      } else {
+        setError(localizedError(cause, t));
+      }
     } finally {
       setGenerating(false);
     }
@@ -145,7 +164,7 @@ function DocumentTopicsPage() {
               <BookOpen className="mx-auto size-5 text-lime" aria-hidden />
               <AppLabel>{t("topics.notAnalyzed")}</AppLabel>
               <p className="mx-auto mt-4 max-w-md text-sm text-muted-foreground">
-                {t("topics.aiCost")}
+                {waiting ? t("topics.waiting") : t("topics.aiCost")}
               </p>
               <PrimaryButton className="mt-6" onClick={() => void analyze()} disabled={generating}>
                 {generating ? t("topics.analyzing") : t("topics.analyze")}

@@ -1,5 +1,24 @@
 import { runReservedAiGeneration } from "./ai-generation-action.ts";
 
+export async function pollForCachedValue<T>({
+  loadCached,
+  wait,
+  intervalMs,
+  maxAttempts,
+}: {
+  loadCached: () => Promise<T | null>;
+  wait: (milliseconds: number) => Promise<void>;
+  intervalMs: number;
+  maxAttempts: number;
+}) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await wait(intervalMs);
+    const cached = await loadCached();
+    if (cached) return cached;
+  }
+  return null;
+}
+
 export async function runCachedTopicDiscovery<TCached, TGenerated, TReservation>({
   loadCached,
   reserve,

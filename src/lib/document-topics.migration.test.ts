@@ -12,6 +12,7 @@ const topicsRoute = readFileSync(
   new URL("../routes/app.materials_.$documentId.topics.tsx", import.meta.url),
   "utf8",
 );
+const i18n = readFileSync(new URL("./i18n.tsx", import.meta.url), "utf8");
 
 const MAX_RANGES_PER_TOPIC = 256;
 const MAX_RANGES_TOTAL = 512;
@@ -165,7 +166,13 @@ test("topic discovery alone may use und while generated-content kinds still requ
 test("server cache and distributed in-progress handling prevent duplicate discovery", () => {
   assert.match(functions, /loadCurrentTopics[\s\S]*runCachedTopicDiscovery/u);
   assert.match(functions, /isGenerationInProgress: isAiGenerationInProgressError/u);
-  assert.match(functions, /waitForCached: \(\) => waitForTopics/u);
+  assert.match(functions, /waitForCached: \(\) => loadCurrentTopics/u);
+  assert.match(functions, /TOPIC_GENERATION_WAIT_MS = 5_000/u);
+  assert.match(functions, /TOPIC_GENERATION_WAIT_ATTEMPTS = 48/u);
+  assert.match(
+    functions,
+    /export const waitForDocumentTopics[\s\S]*requireSupabaseAuth[\s\S]*loadOwnedDocument[\s\S]*waitForTopics/u,
+  );
   assert.match(migration, /kind = p_kind\s+AND locale = p_locale\s+AND status = 'reserved'/u);
 });
 
@@ -173,7 +180,11 @@ test("the UI exposes no-topic, loading, cache, locale-safe navigation, and no do
   assert.match(materials, /materials\.studyTopics/u);
   assert.match(topicsRoute, /topics\.notAnalyzed/u);
   assert.match(topicsRoute, /topics\.analyzing/u);
+  assert.match(topicsRoute, /AI_GENERATION_IN_PROGRESS[\s\S]*setWaiting\(true\)[\s\S]*waitForDocumentTopics/u);
+  assert.match(topicsRoute, /topics\.waiting/u);
   assert.match(topicsRoute, /topics\.cached/u);
+  assert.match(i18n, /Another process is analyzing this material\. Waiting for topics\.\.\./u);
+  assert.match(i18n, /Outro processo está analisando este material\. Aguardando os tópicos\.\.\./u);
   assert.match(topicsRoute, /\/app\/materials\/\$documentId\/topics\/\$topicId/u);
   assert.doesNotMatch(topicsRoute, /generateDocumentSummary|generateDocumentQuestions|generateDocumentFlashcards/u);
 });

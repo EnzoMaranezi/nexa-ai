@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { generateAiText, normalizeAiError } from "@/lib/ai-gateway.server";
-import { runCachedTopicDiscovery } from "@/lib/document-topics.discovery";
+import { pollForCachedValue, runCachedTopicDiscovery } from "@/lib/document-topics.discovery";
 import { parseTopicDiscoveryResponse } from "@/lib/document-topics.parser";
 import {
   TOPIC_DISCOVERY_LANGUAGE_INSTRUCTION,
@@ -35,8 +35,8 @@ export const TOPIC_PERSISTENCE_FAILED = "TOPIC_PERSISTENCE_FAILED";
 
 const MIN_SOURCE_TEXT_CHARS = 600;
 const MAX_SOURCE_CODE_POINTS = 100_000;
-const TOPIC_GENERATION_WAIT_MS = 500;
-const TOPIC_GENERATION_WAIT_ATTEMPTS = 40;
+const TOPIC_GENERATION_WAIT_MS = 5_000;
+const TOPIC_GENERATION_WAIT_ATTEMPTS = 48;
 
 const sourceRangeSchema = z.object({
   start: z.number().int().nonnegative(),
@@ -122,6 +122,13 @@ async function loadCurrentTopics(
   const topics = await loadTopics(supabase, documentId);
   if (topics.length === 0) return null;
   if (topics.some((topic) => topic.sourceHash !== sourceHash)) throw new Error(STALE_TOPIC_SOURCE);
+  if (
+    topics.length < 3 ||
+    topics.length > 12 ||
+    topics.some((topic, index) => topic.position !== index + 1)
+  ) {
+    throw new Error(TOPIC_PERSISTENCE_FAILED);
+  }
   return topics;
 }
 
@@ -130,12 +137,12 @@ async function waitForTopics(
   documentId: string,
   sourceHash: string,
 ) {
-  for (let attempt = 0; attempt < TOPIC_GENERATION_WAIT_ATTEMPTS; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, TOPIC_GENERATION_WAIT_MS));
-    const topics = await loadCurrentTopics(supabase, documentId, sourceHash);
-    if (topics) return topics;
-  }
-  return null;
+  return pollForCachedValue({
+    loadCached: () => loadCurrentTopics(supabase, documentId, sourceHash),
+    wait: (milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)),
+    intervalMs: TOPIC_GENERATION_WAIT_MS,
+    maxAttempts: TOPIC_GENERATION_WAIT_ATTEMPTS,
+  });
 }
 
 function topicPersistencePayload(
@@ -210,6 +217,20 @@ export const getDocumentTopic = createServerFn({ method: "POST" })
     return { document: { id: document.id, title: document.title }, topic };
   });
 
+export const waitForDocumentTopics = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const document = await loadOwnedDocument(context.supabase, context.userId, data.documentId);
+    const source = document.extracted_text;
+    validateDiscoverableSource(source);
+    if (!source) throw new Error(TOPIC_SOURCE_UNAVAILABLE);
+    const sourceHash = await hashTopicSource(source);
+    const topics = await waitForTopics(context.supabase, document.id, sourceHash);
+    if (!topics) throw new Error("AI_GENERATION_IN_PROGRESS");
+    return { document: { id: document.id, title: document.title }, topics };
+  });
+
 export const discoverDocumentTopics = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
@@ -254,7 +275,7 @@ export const discoverDocumentTopics = createServerFn({ method: "POST" })
         },
         finish: (reservation, status) => finishAiGeneration(supabase, reservation.id, status),
         isGenerationInProgress: isAiGenerationInProgressError,
-        waitForCached: () => waitForTopics(supabase, document.id, sourceHash),
+        waitForCached: () => loadCurrentTopics(supabase, document.id, sourceHash),
       });
       return { reused: result.reused, document: { id: document.id, title: document.title }, topics: result.value };
     } catch (error) {

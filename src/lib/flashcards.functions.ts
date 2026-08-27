@@ -125,7 +125,7 @@ export const getDocumentFlashcards = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { locale } = await getAiLocaleContext(context.supabase);
+    const { locale } = getAiLocaleContext(context.claims);
     return loadDeckAvailability(context.supabase, data.documentId, locale);
   });
 
@@ -157,8 +157,8 @@ export const generateDocumentFlashcards = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const localeContext = await getAiLocaleContext(supabase);
+    const { supabase, userId, claims } = context;
+    const localeContext = getAiLocaleContext(claims);
     const { data: doc, error } = await supabase.from("documents").select("id, user_id, title, extracted_text").eq("id", data.documentId).maybeSingle();
     if (error) throw new Error(error.message);
     assertOwnedFlashcardDocument(doc, userId);

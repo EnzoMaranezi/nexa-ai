@@ -91,8 +91,8 @@ test("question-session RLS validates the document and exact set relationship", (
   assert.match(migration, /owned_set\.id = question_sessions\.question_set_id[\s\S]*owned_set\.user_id = auth\.uid\(\)[\s\S]*owned_set\.document_id = question_sessions\.document_id/);
 });
 
-test("generation captures one locale context and uses it for cache, quota, prompt, and persistence", () => {
-  assert.match(summaries, /const localeContext = await getAiLocaleContext\(supabase\)/);
+test("generation captures one verified locale context and uses it for cache, quota, prompt, and persistence", () => {
+  assert.match(summaries, /const localeContext = getAiLocaleContext\(claims\)/);
   assert.match(summaries, /loadSummaryVariant\(supabase, documentRow\.id, localeContext\.locale\)/);
   assert.match(summaries, /reserveAiGeneration\(supabase, "summary", documentRow\.id, localeContext\.locale\)/);
   assert.match(summaries, /p_locale: localeContext\.locale/);

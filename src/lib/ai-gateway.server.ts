@@ -7,8 +7,6 @@ import {
 } from "@/lib/ai-provider-chain";
 import { buildAiGenerationMessages } from "@/lib/ai-generation-messages";
 import { getUserLocale, languageInstruction, type Locale } from "@/lib/i18n";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
 
 const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 const NVIDIA_PRIMARY_MODEL = "openai/gpt-oss-20b";
@@ -132,19 +130,11 @@ export function normalizeAiError(error: unknown, fallback: string): Error {
   return new Error(message || fallback);
 }
 
-export async function getAiLocaleContext(supabase: SupabaseClient<Database>): Promise<{
+/** Locale comes from claims already verified by requireSupabaseAuth. */
+export function getAiLocaleContext(claims: { user_metadata?: unknown }): {
   locale: Locale;
   languageInstruction: string;
-}> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) {
-    throw new Error("Unable to load the authenticated user's language preference.");
-  }
-
-  const locale = getUserLocale(data.user.user_metadata);
+} {
+  const locale = getUserLocale(claims.user_metadata as Record<string, unknown> | undefined);
   return { locale, languageInstruction: languageInstruction(locale) };
-}
-
-export async function getAiLanguageInstruction(supabase: SupabaseClient<Database>) {
-  return (await getAiLocaleContext(supabase)).languageInstruction;
 }

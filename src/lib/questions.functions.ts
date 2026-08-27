@@ -228,8 +228,8 @@ export const getDocumentQuestions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { locale } = await getAiLocaleContext(supabase);
+    const { supabase, claims } = context;
+    const { locale } = getAiLocaleContext(claims);
     const { data: rows, error } = await supabase
       .from("question_sets")
       .select("id, locale, kind, superseded_at, questions, created_at")
@@ -259,8 +259,8 @@ export const generateDocumentQuestions = createServerFn({ method: "POST" })
     z.object({ documentId: z.string().uuid(), regenerate: z.boolean().optional() }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const localeContext = await getAiLocaleContext(supabase);
+    const { supabase, userId, claims } = context;
+    const localeContext = getAiLocaleContext(claims);
 
     const { data: doc, error: docError } = await supabase
       .from("documents")

@@ -254,8 +254,8 @@ export const generateDocumentSummary = createServerFn({ method: "POST" })
     z.object({ documentId: z.string().uuid(), regenerate: z.boolean().optional() }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const localeContext = await getAiLocaleContext(supabase);
+    const { supabase, userId, claims } = context;
+    const localeContext = getAiLocaleContext(claims);
 
     // RLS already scopes rows to the caller; the explicit user check is a second gate.
     const { data: doc, error: docError } = await supabase

@@ -134,7 +134,8 @@ test("no active-locale decks is distinct from a deck with no due cards", () => {
 
 test("server query is authenticated, locale-scoped, indexed, and owner-isolated by RLS", () => {
   assert.match(functionsSource, /middleware\(\[requireSupabaseAuth\]\)/);
-  assert.match(functionsSource, /auth\.getUser\(\)/);
+  assert.match(functionsSource, /getAiLocaleContext\(claims\)/);
+  assert.doesNotMatch(functionsSource, /auth\.getUser\(\)/);
   assert.match(functionsSource, /eq\("locale", locale\)/);
   assert.match(functionsSource, /\.in\(\s*"flashcard_set_id"/);
   assert.doesNotMatch(functionsSource, /inputValidator|userId|user_id/);

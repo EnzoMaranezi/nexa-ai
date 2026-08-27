@@ -6,17 +6,13 @@ import {
   type FlashcardOverviewSetRow,
   type FlashcardReviewOverview,
 } from "@/lib/flashcards.overview";
-import { getUserLocale } from "@/lib/i18n";
+import { getAiLocaleContext } from "@/lib/ai-gateway.server";
 
 export const getFlashcardReviewOverview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<FlashcardReviewOverview> => {
-    const { supabase } = context;
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user) {
-      throw new Error("Unable to load the authenticated user's language preference.");
-    }
-    const locale = getUserLocale(authData.user.user_metadata);
+    const { supabase, claims } = context;
+    const { locale } = getAiLocaleContext(claims);
     const { data: setRows, error: setsError } = await supabase
       .from("flashcard_sets")
       .select("id, document_id, locale, documents!inner(title)")

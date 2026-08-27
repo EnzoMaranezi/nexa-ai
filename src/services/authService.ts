@@ -86,6 +86,8 @@ export async function updateDisplayName(fullName: string): Promise<User> {
 export async function updateLanguagePreference(locale: Locale): Promise<User> {
   const { data, error } = await supabase.auth.updateUser({ data: { locale } });
   if (error) throw authError(error.message);
+  const { error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) throw authError(refreshError.message);
   return data.user;
 }
 

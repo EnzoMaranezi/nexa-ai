@@ -21,6 +21,7 @@ const flashcardsUi = readFileSync(
   new URL("../components/app/DocumentFlashcards.tsx", import.meta.url),
   "utf8",
 );
+const authService = readFileSync(new URL("../services/authService.ts", import.meta.url), "utf8");
 
 test("historical generated content is backfilled without guessing its locale", () => {
   assert.match(migration, /UPDATE public\.summaries\s+SET locale = 'und'/);
@@ -129,4 +130,11 @@ test("all three UIs reload on locale changes and require explicit generation", (
     assert.match(source, /\[documentId, locale(?:, [^\]]+)?\]/);
     assert.doesNotMatch(source, /useEffect\([\s\S]{0,500}generate\(/);
   }
+});
+
+test("saving a locale refreshes JWT claims used by authenticated cache reads", () => {
+  assert.match(
+    authService,
+    /updateLanguagePreference[\s\S]*updateUser\(\{ data: \{ locale \} \}\)[\s\S]*refreshSession\(\)/,
+  );
 });

@@ -10,7 +10,12 @@ loadDotEnv();
 const BASE_URL = process.env.NVIDIA_BASE_URL ?? "https://integrate.api.nvidia.com/v1";
 const API_KEY_ENV = "NVIDIA_API_KEY";
 const MAX_INPUT_CHARS = 60_000;
-const REQUEST_TIMEOUT_MS = Number(process.env.NVIDIA_REQUEST_TIMEOUT_MS ?? 45_000);
+const requestTimeoutArgument = process.argv
+  .slice(2)
+  .find((argument) => argument.startsWith("--request-timeout-ms="));
+const REQUEST_TIMEOUT_MS = Number(
+  requestTimeoutArgument?.split("=")[1] ?? process.env.NVIDIA_REQUEST_TIMEOUT_MS ?? 45_000,
+);
 
 const SYSTEM_SUMMARY_PROMPT = `You are NEXA, an academic study agent.
 You write structured study summaries based EXCLUSIVELY on the material provided by the user.
@@ -451,7 +456,11 @@ function selectModel(models) {
   return fallback ?? "openai/gpt-oss-20b";
 }
 
-async function chatCompletion(apiKey, model, { label, system, prompt, maxTokens }) {
+async function chatCompletion(
+  apiKey,
+  model,
+  { label, system, prompt, maxTokens, reasoningEffort },
+) {
   const response = await requestJson("/chat/completions", {
     method: "POST",
     headers: {
@@ -467,16 +476,42 @@ async function chatCompletion(apiKey, model, { label, system, prompt, maxTokens 
       ],
       temperature: 0.2,
       max_tokens: maxTokens,
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       stream: false,
     }),
   });
 
-  const content = response.json?.choices?.[0]?.message?.content ?? "";
+  const choice = response.json?.choices?.[0];
+  const message = choice?.message;
+  const content = typeof message?.content === "string" ? message.content : "";
+  const numericUsage = response.json?.usage && typeof response.json.usage === "object"
+    ? Object.fromEntries(
+        Object.entries(response.json.usage).filter(([, value]) =>
+          typeof value === "number" || (value !== null && typeof value === "object"),
+        ),
+      )
+    : null;
   return {
     label,
     ...response,
     model: response.json?.model ?? model,
     content,
+    finishReason: choice?.finish_reason ?? null,
+    reasoningCharacters:
+      typeof message?.reasoning_content === "string"
+        ? message.reasoning_content.length
+        : 0,
+    responseStructure: {
+      topLevelKeys: response.json && typeof response.json === "object"
+        ? Object.keys(response.json).sort()
+        : [],
+      choiceKeys: choice && typeof choice === "object" ? Object.keys(choice).sort() : [],
+      messageKeys: message && typeof message === "object" ? Object.keys(message).sort() : [],
+      contentType: Array.isArray(message?.content) ? "array" : typeof message?.content,
+      hasReasoning: Object.hasOwn(message ?? {}, "reasoning"),
+      hasReasoningContent: Object.hasOwn(message ?? {}, "reasoning_content"),
+    },
+    usage: numericUsage,
   };
 }
 
@@ -494,6 +529,10 @@ function printResult(result, extra = {}) {
         contentType: result.contentType,
         latencyMs: result.latencyMs,
         model: result.model,
+        finishReason: result.finishReason,
+        reasoningCharacters: result.reasoningCharacters,
+        responseStructure: result.responseStructure,
+        usage: result.usage,
         rateLimitHeaders: result.rateLimitHeaders,
         bodySummary,
         ...extra,
@@ -605,7 +644,12 @@ if (scriptArgs.includes("--list-only")) {
 const selectedModel =
   scriptArgs.find((argument) => !argument.startsWith("--")) ?? selectModel(models);
 const summaryLocale = scriptArgs.includes("--summary-locale=en") ? "en" : "pt-BR";
-const summaryOnly = scriptArgs.includes("--summary-only");
+const topicSummaryOnly = scriptArgs.includes("--topic-summary-only");
+const summaryOnly = scriptArgs.includes("--summary-only") || topicSummaryOnly;
+const topicMaxTokensArgument = scriptArgs.find((argument) =>
+  argument.startsWith("--topic-max-tokens="),
+);
+const topicMaxTokens = Number(topicMaxTokensArgument?.split("=")[1] ?? 2_500);
 console.log(
   JSON.stringify(
     {
@@ -634,25 +678,46 @@ const summaryLanguageInstruction = summaryUsesEnglish
 const summaryTitle = summaryUsesEnglish
   ? "Database transaction fundamentals"
   : "Conceitos básicos de sistemas operacionais";
-const summaryMaterial = summaryUsesEnglish ? ENGLISH_MATERIAL : PORTUGUESE_MATERIAL;
+const summaryMaterial = summaryUsesEnglish
+  ? topicSummaryOnly
+    ? ENGLISH_MATERIAL.split("\n\n")[0]
+    : ENGLISH_MATERIAL
+  : topicSummaryOnly
+    ? PORTUGUESE_MATERIAL.split("\n\n")[1]
+    : PORTUGUESE_MATERIAL;
+const summaryTask = topicSummaryOnly
+  ? `Document title: ${summaryTitle}
+Topic title: ${summaryUsesEnglish ? "Transaction guarantees and isolation" : "Escalonamento e concorrência"}
 
-const summaryMessages = buildGenerationMessages({
-  system: SYSTEM_SUMMARY_PROMPT,
-  prompt: `Document title: ${summaryTitle}
+TOPIC-FOCUSED MODE:
+Summarize ONLY the topic excerpt below. Do not expand into other sections of the document or add related background that is absent from this excerpt.
+
+TOPIC EXCERPT (the only allowed source):
+"""
+${summaryMaterial.slice(0, MAX_INPUT_CHARS)}
+"""
+
+Produce the structured study summary for this topic.`
+  : `Document title: ${summaryTitle}
 
 MATERIAL (the only allowed source):
 """
 ${summaryMaterial.slice(0, MAX_INPUT_CHARS)}
 """
 
-Produce the structured study summary.`,
+Produce the structured study summary.`;
+
+const summaryMessages = buildGenerationMessages({
+  system: SYSTEM_SUMMARY_PROMPT,
+  prompt: summaryTask,
   outputFormat: MARKDOWN_SUMMARY_FORMAT,
   languageInstruction: summaryLanguageInstruction,
 });
 const summaryResult = await chatCompletion(apiKey, selectedModel, {
-  label: `summary-${summaryLocale}`,
+  label: `${topicSummaryOnly ? "topic-summary" : "summary"}-${summaryLocale}`,
   system: summaryMessages.system,
-  maxTokens: 1_600,
+  maxTokens: topicSummaryOnly ? topicMaxTokens : 1_600,
+  reasoningEffort: topicSummaryOnly ? "low" : undefined,
   prompt: summaryMessages.prompt,
 });
 const summaryValidation = validateParsedSummary(summaryResult.content);
@@ -660,6 +725,11 @@ printResult(summaryResult, {
   followedLanguage: summaryUsesEnglish
     ? /transaction|database|isolation|durability|index/i.test(summaryResult.content)
     : /processo|sistema|memória|escalonamento|explic/i.test(summaryResult.content),
+  unrelatedContentAbsent: topicSummaryOnly
+    ? summaryUsesEnglish
+      ? !/B-tree|query planner|table statistics/i.test(summaryResult.content)
+      : !/memória virtual|paginação|deadlock|falta de página/i.test(summaryResult.content)
+    : undefined,
     rawHeadingContract: summaryValidation.rawFormatCompliant,
     parserCompatible: summaryValidation.normalizedFormatCompliant,
     rawHeadingLines: summaryValidation.rawHeadingLines,

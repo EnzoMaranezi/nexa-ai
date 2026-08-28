@@ -12,10 +12,11 @@ import type { PersistedContentLocale } from "@/lib/i18n";
 interface Props {
   documentId: string;
   documentTitle: string;
+  topicId?: string;
 }
 
 /** "Ready for analysis" card: generates and displays the AI study summary. */
-export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
+export function DocumentSummaryPanel({ documentId, documentTitle, topicId }: Props) {
   const { locale, t } = useI18n();
   const [summary, setSummary] = useState<StudySummary | null>(null);
   const [currentAvailable, setCurrentAvailable] = useState(false);
@@ -25,7 +26,7 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
   }>>([]);
   const [checking, setChecking] = useState(true);
   const [lookupAttempt, setLookupAttempt] = useState(0);
-  const [lookupError, setLookupError] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,8 +38,8 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
     setSummary(null);
     setCurrentAvailable(false);
     setAlternatives([]);
-    setLookupError(false);
-    getDocumentSummary({ data: { documentId } })
+    setLookupError(null);
+    getDocumentSummary({ data: { documentId, topicId } })
       .then((res) => {
         if (cancelled) return;
         setAlternatives(res.alternatives);
@@ -47,8 +48,8 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
           setCurrentAvailable(true);
         }
       })
-      .catch(() => {
-        if (!cancelled) setLookupError(true);
+      .catch((cause: unknown) => {
+        if (!cancelled) setLookupError(summaryErrorMessage(cause, t, true, Boolean(topicId)));
       })
       .finally(() => {
         if (!cancelled) setChecking(false);
@@ -56,17 +57,17 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [documentId, locale, lookupAttempt]);
+  }, [documentId, topicId, locale, lookupAttempt]);
 
   async function generate(regenerate = false) {
     setLoading(true);
     setError(null);
     try {
-      const res = await generateDocumentSummary({ data: { documentId, regenerate } });
+      const res = await generateDocumentSummary({ data: { documentId, topicId, regenerate } });
       setSummary(res.summary);
       setCurrentAvailable(true);
     } catch (err) {
-      setError(aiErrorMessage(err, t, t("summary.errorGenerate")));
+      setError(summaryErrorMessage(err, t, false, Boolean(topicId)));
     } finally {
       setLoading(false);
     }
@@ -74,21 +75,31 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
 
   return (
     <AppCard>
-      <AppLabel>{summary ? t("summary.savedLabel") : t("summary.readyLabel")}</AppLabel>
+      <AppLabel>
+        {topicId
+          ? summary
+            ? t("topics.summarySavedLabel")
+            : t("topics.summaryReadyLabel")
+          : summary
+            ? t("summary.savedLabel")
+            : t("summary.readyLabel")}
+      </AppLabel>
       <p className="mt-4 truncate font-mono text-sm">{documentTitle}</p>
       <p className="mt-2 text-sm text-muted-foreground">
         {checking
-          ? t("summary.checking")
+          ? t(topicId ? "topics.summaryChecking" : "summary.checking")
           : summary
-            ? t("summary.saved")
-            : t("summary.ready")}
+            ? t(topicId ? "topics.summarySaved" : "summary.saved")
+            : t(topicId ? "topics.summaryReady" : "summary.ready")}
       </p>
 
       {!checking && !lookupError && (
         <div className="mt-6 flex flex-wrap gap-3">
           {!summary && alternatives.length === 0 ? (
             <PrimaryButton onClick={() => generate(false)} disabled={loading}>
-              {loading ? t("summary.generating") : t("summary.generate")}{" "}
+              {loading
+                ? t(topicId ? "topics.summaryGenerating" : "summary.generating")
+                : t(topicId ? "topics.summaryGenerate" : "summary.generate")}{" "}
               <Sparkles className="h-4 w-4" aria-hidden />
             </PrimaryButton>
           ) : currentAvailable ? (
@@ -98,7 +109,9 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
               }}
               disabled={loading}
             >
-              {loading ? t("summary.regenerating") : t("summary.regenerateShort")}
+              {loading
+                ? t("summary.regenerating")
+                : t(topicId ? "topics.summaryRegenerate" : "summary.regenerateShort")}
             </GhostButton>
           ) : null}
         </div>
@@ -106,7 +119,7 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
 
       {!checking && lookupError ? (
         <div className="mt-6 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-4">
-          <p role="alert" className="text-sm">{t("summary.loadError")}</p>
+          <p role="alert" className="text-sm">{lookupError}</p>
           <GhostButton className="mt-4" onClick={() => setLookupAttempt((value) => value + 1)}>
             {t("common.retry")}
           </GhostButton>
@@ -138,7 +151,7 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
 
       {loading && !summary && (
         <p className="mt-6 font-mono text-xs text-muted-foreground" aria-live="polite">
-          {t("summary.reading")}
+          {t(topicId ? "topics.summaryReading" : "summary.reading")}
         </p>
       )}
 
@@ -221,5 +234,33 @@ export function DocumentSummaryPanel({ documentId, documentTitle }: Props) {
         </motion.div>
       )}
     </AppCard>
+  );
+}
+
+function summaryErrorMessage(
+  error: unknown,
+  t: (key: string) => string,
+  loading: boolean,
+  topicScoped: boolean,
+) {
+  const message = error instanceof Error ? error.message : "";
+  if (topicScoped) {
+    if (message.includes("STALE_TOPIC_SOURCE")) return t("topics.stale");
+    if (message.includes("TOPIC_SOURCE_UNAVAILABLE")) return t("topics.summarySourceUnavailable");
+    if (message.includes("INVALID_TOPIC_SOURCE_RANGE")) return t("topics.summarySourceInvalid");
+    if (message.includes("TOPIC_NOT_FOUND")) return t("topics.topicMissing");
+  }
+  return aiErrorMessage(
+    error,
+    t,
+    t(
+      loading
+        ? topicScoped
+          ? "topics.summaryLoadError"
+          : "summary.loadError"
+        : topicScoped
+          ? "topics.summaryGenerateError"
+          : "summary.errorGenerate",
+    ),
   );
 }

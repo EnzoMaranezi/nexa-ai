@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { AppCard, AppLabel, ErrorState, Skeleton } from "@/components/app/ui";
+import { DocumentSummaryPanel } from "@/components/app/DocumentSummary";
 import {
   getDocumentTopic,
   STALE_TOPIC_SOURCE,
@@ -86,6 +87,11 @@ function DocumentTopicDetailPage() {
               {state.topic.description}
             </p>
           </AppCard>
+          <DocumentSummaryPanel
+            documentId={state.document.id}
+            documentTitle={state.topic.title}
+            topicId={state.topic.id}
+          />
           <AppCard className="border-dashed">
             <AppLabel>{t("topics.detailComing")}</AppLabel>
             <p className="mt-4 text-sm leading-relaxed text-muted-foreground">

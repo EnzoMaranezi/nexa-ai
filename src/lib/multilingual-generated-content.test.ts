@@ -93,8 +93,8 @@ test("question-session RLS validates the document and exact set relationship", (
 
 test("generation captures one verified locale context and uses it for cache, quota, prompt, and persistence", () => {
   assert.match(summaries, /const localeContext = getAiLocaleContext\(claims\)/);
-  assert.match(summaries, /loadSummaryVariant\(supabase, documentRow\.id, localeContext\.locale\)/);
-  assert.match(summaries, /reserveAiGeneration\(supabase, "summary", documentRow\.id, localeContext\.locale\)/);
+  assert.match(summaries, /loadSummaryVariant\([\s\S]*documentRow\.id,[\s\S]*localeContext\.locale,[\s\S]*topicId/);
+  assert.match(summaries, /reserveAiGeneration\([\s\S]*"summary",[\s\S]*documentRow\.id,[\s\S]*localeContext\.locale,[\s\S]*topicId/);
   assert.match(summaries, /p_locale: localeContext\.locale/);
   assert.match(questions, /reserveAiGeneration\(supabase, "questions", doc\.id, localeContext\.locale\)/);
   assert.match(flashcards, /reserveAiGeneration\(supabase, "flashcards", doc\.id, localeContext\.locale\)/);
@@ -127,7 +127,7 @@ test("unfinished sessions remain bound to their exact set and require explicit c
 test("all three UIs reload on locale changes and require explicit generation", () => {
   for (const source of [summaryUi, questionsUi, flashcardsUi]) {
     assert.match(source, /GeneratedContentLanguageState/);
-    assert.match(source, /\[documentId, locale(?:, [^\]]+)?\]/);
+    assert.match(source, /\[documentId,(?: topicId,)? locale(?:, [^\]]+)?\]/);
     assert.doesNotMatch(source, /useEffect\([\s\S]{0,500}generate\(/);
   }
 });

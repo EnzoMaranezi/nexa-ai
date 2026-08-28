@@ -24,6 +24,8 @@ export type Database = {
           locale: string
           reserved_until: string
           status: string
+          topic_id: string | null
+          topic_scope_id: string | null
           usage_date: string
           user_id: string
         }
@@ -36,6 +38,8 @@ export type Database = {
           locale: string
           reserved_until: string
           status: string
+          topic_id?: string | null
+          topic_scope_id?: string | null
           usage_date?: string
           user_id: string
         }
@@ -48,6 +52,8 @@ export type Database = {
           locale?: string
           reserved_until?: string
           status?: string
+          topic_id?: string | null
+          topic_scope_id?: string | null
           usage_date?: string
           user_id?: string
         }
@@ -57,6 +63,13 @@ export type Database = {
             columns: ["document_id"]
             isOneToOne: false
             referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_generation_events_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "document_topics"
             referencedColumns: ["id"]
           },
         ]
@@ -293,6 +306,7 @@ export type Database = {
           id: string
           locale: string
           model: string | null
+          topic_id: string | null
           title: string
           updated_at: string
           user_id: string
@@ -304,6 +318,7 @@ export type Database = {
           id?: string
           locale: string
           model?: string | null
+          topic_id?: string | null
           title: string
           updated_at?: string
           user_id: string
@@ -315,6 +330,7 @@ export type Database = {
           id?: string
           locale?: string
           model?: string | null
+          topic_id?: string | null
           title?: string
           updated_at?: string
           user_id?: string
@@ -325,6 +341,13 @@ export type Database = {
             columns: ["document_id"]
             isOneToOne: false
             referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "summaries_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "document_topics"
             referencedColumns: ["id"]
           },
         ]
@@ -377,6 +400,7 @@ export type Database = {
           p_kind: string
           p_document_id: string
           p_locale: string
+          p_topic_id?: string | null
         }
         Returns: {
           reservation_id: string
@@ -391,6 +415,7 @@ export type Database = {
           p_locale: string
           p_model: string | null
           p_title: string
+          p_topic_id?: string | null
         }
         Returns: string
       }

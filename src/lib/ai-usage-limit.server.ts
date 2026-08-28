@@ -46,11 +46,13 @@ export async function reserveAiGeneration(
   kind: AiGenerationKind,
   documentId: string,
   locale: PersistedContentLocale,
+  topicId: string | null = null,
 ): Promise<AiGenerationReservation> {
   const { data, error } = await supabase.rpc("reserve_ai_generation", {
     p_kind: kind,
     p_document_id: documentId,
     p_locale: locale,
+    p_topic_id: topicId,
   });
 
   if (error) {

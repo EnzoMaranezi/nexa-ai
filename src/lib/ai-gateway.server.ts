@@ -18,6 +18,8 @@ type AiGenerationRequest = {
   prompt: string;
   outputFormat?: string;
   languageInstruction: string;
+  maxOutputTokens?: number;
+  reasoningEffort?: "low" | "medium" | "high";
 };
 
 type AiTextGeneration = {
@@ -85,6 +87,8 @@ export async function generateAiText({
   prompt,
   outputFormat,
   languageInstruction: outputLanguageInstruction,
+  maxOutputTokens,
+  reasoningEffort,
 }: AiGenerationRequest): Promise<AiTextGeneration> {
   const attempts = availableProviderAttempts();
   if (attempts.length === 0) throw new Error(AI_PROVIDERS_UNAVAILABLE);
@@ -106,6 +110,10 @@ export async function generateAiText({
           model: provider(attempt.model),
           system: messages.system,
           prompt: messages.prompt,
+          ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+          ...(attempt.provider === "nvidia" && reasoningEffort
+            ? { providerOptions: { nvidia: { reasoningEffort } } }
+            : {}),
         });
         return { text: result.text, provider: attempt.provider, model: attempt.model };
       },

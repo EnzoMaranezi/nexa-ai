@@ -9,6 +9,10 @@ import { finishAiGeneration, isAiDailyLimitError, isAiGenerationInProgressError,
 import { flashcardRatingSchema, type FlashcardDeck, type FlashcardReviewResult, type StoredFlashcard } from "@/lib/flashcards.schema";
 import { assertOwnedFlashcardDocument, parseMarkdownFlashcards } from "@/lib/flashcards.parser";
 import type { Locale, PersistedContentLocale } from "@/lib/i18n";
+import {
+  parseTopicSummarySourceRanges,
+  reconstructVerifiedTopicSource,
+} from "@/lib/topic-summary-source";
 
 const MAX_INPUT_CHARS = 60_000;
 const SYSTEM_PROMPT = `You are NEXA, an academic study agent. Create recall flashcards based EXCLUSIVELY on the supplied material.
@@ -50,8 +54,21 @@ async function loadDeckBySet(
   return { id: set.id, locale: set.locale as PersistedContentLocale, createdAt: set.created_at, model: set.model, cards: cards.map(mapStoredFlashcard) };
 }
 
-async function loadDeck(supabase: SupabaseClient<Database>, documentId: string, locale: Locale) {
-  const { data: set, error } = await supabase.from("flashcard_sets").select("id, locale, created_at, model").eq("document_id", documentId).eq("locale", locale).maybeSingle();
+async function loadDeck(
+  supabase: SupabaseClient<Database>,
+  documentId: string,
+  locale: Locale,
+  topicId: string | null = null,
+) {
+  const query = supabase
+    .from("flashcard_sets")
+    .select("id, locale, created_at, model")
+    .eq("document_id", documentId)
+    .eq("locale", locale);
+  const { data: set, error } = await (topicId
+    ? query.eq("topic_id", topicId)
+    : query.is("topic_id", null)
+  ).maybeSingle();
   if (error || !set) return null;
   return loadDeckBySet(supabase, set);
 }
@@ -60,12 +77,16 @@ async function loadDeckAvailability(
   supabase: SupabaseClient<Database>,
   documentId: string,
   locale: Locale,
+  topicId: string | null = null,
 ) {
-  const { data: sets, error } = await supabase
+  const query = supabase
     .from("flashcard_sets")
     .select("id, locale, created_at, model")
     .eq("document_id", documentId)
     .order("created_at", { ascending: false });
+  const { data: sets, error } = await (topicId
+    ? query.eq("topic_id", topicId)
+    : query.is("topic_id", null));
   if (error) throw new Error(error.message);
   const variants = await Promise.all((sets ?? []).map((set) => loadDeckBySet(supabase, set)));
   return {
@@ -75,8 +96,21 @@ async function loadDeckAvailability(
   };
 }
 
-async function loadReviewQueue(supabase: SupabaseClient<Database>, documentId: string, setId: string) {
-  const { data: set, error } = await supabase.from("flashcard_sets").select("id").eq("id", setId).eq("document_id", documentId).maybeSingle();
+async function loadReviewQueue(
+  supabase: SupabaseClient<Database>,
+  documentId: string,
+  setId: string,
+  topicId: string | null = null,
+) {
+  const query = supabase
+    .from("flashcard_sets")
+    .select("id")
+    .eq("id", setId)
+    .eq("document_id", documentId);
+  const { data: set, error } = await (topicId
+    ? query.eq("topic_id", topicId)
+    : query.is("topic_id", null)
+  ).maybeSingle();
   if (error) throw new Error(error.message);
   if (!set) return null;
 
@@ -112,27 +146,88 @@ async function loadReviewQueue(supabase: SupabaseClient<Database>, documentId: s
 const FLASHCARD_GENERATION_WAIT_MS = 500;
 const FLASHCARD_GENERATION_WAIT_ATTEMPTS = 40;
 
-async function waitForDeck(supabase: SupabaseClient<Database>, documentId: string, locale: Locale) {
+async function waitForDeck(
+  supabase: SupabaseClient<Database>,
+  documentId: string,
+  locale: Locale,
+  topicId: string | null = null,
+) {
   for (let attempt = 0; attempt < FLASHCARD_GENERATION_WAIT_ATTEMPTS; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, FLASHCARD_GENERATION_WAIT_MS));
-    const existing = await loadDeck(supabase, documentId, locale);
+    const existing = await loadDeck(supabase, documentId, locale, topicId);
     if (existing) return existing;
   }
   return null;
 }
 
+type FlashcardDocument = {
+  id: string;
+  user_id: string;
+  title: string;
+  extracted_text: string | null;
+};
+
+async function loadOwnedFlashcardDocument(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  documentId: string,
+) {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("id, user_id, title, extracted_text")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  assertOwnedFlashcardDocument(data, userId);
+  return data satisfies FlashcardDocument;
+}
+
+async function loadTopicFlashcardContext(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  document: FlashcardDocument,
+  topicId: string,
+) {
+  const { data: topic, error } = await supabase
+    .from("document_topics")
+    .select("id, user_id, document_id, title, source_ranges, source_hash")
+    .eq("id", topicId)
+    .maybeSingle();
+  if (
+    error ||
+    !topic ||
+    topic.user_id !== userId ||
+    topic.document_id !== document.id
+  ) {
+    throw new Error("TOPIC_NOT_FOUND");
+  }
+
+  const sourceText = await reconstructVerifiedTopicSource({
+    source: document.extracted_text,
+    sourceRanges: parseTopicSummarySourceRanges(topic.source_ranges),
+    sourceHash: topic.source_hash,
+  });
+  if (sourceText.trim().length < 200) throw new Error("TOPIC_SOURCE_UNAVAILABLE");
+  return { id: topic.id, title: topic.title, sourceText };
+}
+
 export const getDocumentFlashcards = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
+  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid(), topicId: z.string().uuid().optional() }).parse(data))
   .handler(async ({ data, context }) => {
     const { locale } = getAiLocaleContext(context.claims);
-    return loadDeckAvailability(context.supabase, data.documentId, locale);
+    const topicId = data.topicId ?? null;
+    if (topicId) {
+      const document = await loadOwnedFlashcardDocument(context.supabase, context.userId, data.documentId);
+      await loadTopicFlashcardContext(context.supabase, context.userId, document, topicId);
+    }
+    return loadDeckAvailability(context.supabase, data.documentId, locale, topicId);
   });
 
 export const getDocumentFlashcardReviewQueue = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid(), flashcardSetId: z.string().uuid() }).parse(data))
-  .handler(async ({ data, context }) => loadReviewQueue(context.supabase, data.documentId, data.flashcardSetId));
+  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid(), flashcardSetId: z.string().uuid(), topicId: z.string().uuid().optional() }).parse(data))
+  .handler(async ({ data, context }) => loadReviewQueue(context.supabase, data.documentId, data.flashcardSetId, data.topicId ?? null));
 
 export const reviewFlashcard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -155,26 +250,35 @@ export const reviewFlashcard = createServerFn({ method: "POST" })
 
 export const generateDocumentFlashcards = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
+  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid(), topicId: z.string().uuid().optional() }).parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId, claims } = context;
     const localeContext = getAiLocaleContext(claims);
-    const { data: doc, error } = await supabase.from("documents").select("id, user_id, title, extracted_text").eq("id", data.documentId).maybeSingle();
-    if (error) throw new Error(error.message);
-    assertOwnedFlashcardDocument(doc, userId);
-    const extractedText = doc.extracted_text;
+    const doc = await loadOwnedFlashcardDocument(supabase, userId, data.documentId);
+    const topicId = data.topicId ?? null;
+    const topic = topicId
+      ? await loadTopicFlashcardContext(supabase, userId, doc, topicId)
+      : null;
+    const extractedText = topic ? topic.sourceText : doc.extracted_text;
     if (!extractedText || extractedText.trim().length < 200) throw new Error("This document has no readable extracted text yet. Process the PDF before generating flashcards.");
-    const existing = await loadDeck(supabase, doc.id, localeContext.locale);
+    const existing = await loadDeck(supabase, doc.id, localeContext.locale, topicId);
     if (existing) return { reused: true as const, ...existing };
     try {
       const saved = await runReservedAiGeneration({
-        reserve: () => reserveAiGeneration(supabase, "flashcards", doc.id, localeContext.locale),
-        generate: () => generateAiText({ system: SYSTEM_PROMPT, prompt: `Document title: ${doc.title}\n\nMATERIAL (the only allowed source):\n"""\n${extractedText.slice(0, MAX_INPUT_CHARS)}\n"""\n\nCreate the flashcard deck.`, outputFormat: MARKDOWN_FLASHCARD_FORMAT, languageInstruction: localeContext.languageInstruction }),
+        reserve: () => reserveAiGeneration(supabase, "flashcards", doc.id, localeContext.locale, topicId),
+        generate: () => generateAiText({
+          system: SYSTEM_PROMPT,
+          prompt: topic
+            ? `Document title: ${doc.title}\nTopic title: ${topic.title}\n\nTOPIC-FOCUSED MODE:\nCreate flashcards ONLY from the selected topic excerpt. Do not use other document sections or outside context.\n\nTOPIC EXCERPT (the only allowed source):\n"""\n${extractedText.slice(0, MAX_INPUT_CHARS)}\n"""\n\nCreate the flashcard deck.`
+            : `Document title: ${doc.title}\n\nMATERIAL (the only allowed source):\n"""\n${extractedText.slice(0, MAX_INPUT_CHARS)}\n"""\n\nCreate the flashcard deck.`,
+          outputFormat: MARKDOWN_FLASHCARD_FORMAT,
+          languageInstruction: localeContext.languageInstruction,
+        }),
         afterGenerate: async (result) => {
           const deck: FlashcardDeck = parseMarkdownFlashcards(result.text);
-          const { error: persistError } = await supabase.rpc("create_flashcard_set_with_cards", { p_document_id: doc.id, p_locale: localeContext.locale, p_model: result.model, p_cards: deck.cards as unknown as Json });
+          const { error: persistError } = await supabase.rpc("create_flashcard_set_with_cards", { p_document_id: doc.id, p_locale: localeContext.locale, p_model: result.model, p_cards: deck.cards as unknown as Json, p_topic_id: topicId });
           if (persistError) throw new Error(persistError.message);
-          const savedDeck = await loadDeck(supabase, doc.id, localeContext.locale);
+          const savedDeck = await loadDeck(supabase, doc.id, localeContext.locale, topicId);
           if (!savedDeck) throw new Error("The flashcards were generated but couldn't be saved.");
           return savedDeck;
         },
@@ -184,7 +288,7 @@ export const generateDocumentFlashcards = createServerFn({ method: "POST" })
     } catch (cause) {
       if (isAiDailyLimitError(cause)) throw cause;
       if (isAiGenerationInProgressError(cause)) {
-        const saved = await waitForDeck(supabase, doc.id, localeContext.locale);
+        const saved = await waitForDeck(supabase, doc.id, localeContext.locale, topicId);
         if (saved) return { reused: true as const, ...saved };
         throw new Error("Flashcard generation is already in progress. Please try again shortly.");
       }

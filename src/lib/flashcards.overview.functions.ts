@@ -15,7 +15,7 @@ export const getFlashcardReviewOverview = createServerFn({ method: "POST" })
     const { locale } = getAiLocaleContext(claims);
     const { data: setRows, error: setsError } = await supabase
       .from("flashcard_sets")
-      .select("id, document_id, locale, documents!inner(title)")
+      .select("id, document_id, topic_id, locale, documents!inner(title), document_topics(title)")
       .eq("locale", locale)
       .order("document_id");
 
@@ -25,6 +25,10 @@ export const getFlashcardReviewOverview = createServerFn({ method: "POST" })
       id: row.id,
       documentId: row.document_id,
       documentTitle: (row.documents as { title: string }).title,
+      topicId: row.topic_id,
+      topicTitle: row.document_topics
+        ? (row.document_topics as { title: string }).title
+        : null,
       locale,
     }));
 

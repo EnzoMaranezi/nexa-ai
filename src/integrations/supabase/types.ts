@@ -164,10 +164,13 @@ export type Database = {
         ]
       }
       flashcard_sets: {
-        Row: { created_at: string; document_id: string; id: string; locale: string; model: string | null; updated_at: string; user_id: string }
-        Insert: { created_at?: string; document_id: string; id?: string; locale: string; model?: string | null; updated_at?: string; user_id: string }
-        Update: { created_at?: string; document_id?: string; id?: string; locale?: string; model?: string | null; updated_at?: string; user_id?: string }
-        Relationships: [{ foreignKeyName: "flashcard_sets_document_id_fkey"; columns: ["document_id"]; isOneToOne: false; referencedRelation: "documents"; referencedColumns: ["id"] }]
+        Row: { created_at: string; document_id: string; id: string; locale: string; model: string | null; topic_id: string | null; updated_at: string; user_id: string }
+        Insert: { created_at?: string; document_id: string; id?: string; locale: string; model?: string | null; topic_id?: string | null; updated_at?: string; user_id: string }
+        Update: { created_at?: string; document_id?: string; id?: string; locale?: string; model?: string | null; topic_id?: string | null; updated_at?: string; user_id?: string }
+        Relationships: [
+          { foreignKeyName: "flashcard_sets_document_id_fkey"; columns: ["document_id"]; isOneToOne: false; referencedRelation: "documents"; referencedColumns: ["id"] },
+          { foreignKeyName: "flashcard_sets_topic_id_fkey"; columns: ["topic_id"]; isOneToOne: false; referencedRelation: "document_topics"; referencedColumns: ["id"] },
+        ]
       }
       flashcards: {
         Row: { back: string; created_at: string; due_at: string; ease_factor: number; flashcard_set_id: string; front: string; id: string; interval_days: number; last_reviewed_at: string | null; position: number; repetitions: number }
@@ -378,7 +381,7 @@ export type Database = {
         Returns: undefined
       }
       create_flashcard_set_with_cards: {
-        Args: { p_cards: Json; p_document_id: string; p_locale: string; p_model: string | null }
+        Args: { p_cards: Json; p_document_id: string; p_locale: string; p_model: string | null; p_topic_id?: string | null }
         Returns: string
       }
       create_document_topics: {

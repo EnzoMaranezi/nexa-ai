@@ -146,5 +146,4 @@ test("topic detail reuses the summary and language-mismatch UI without automatic
 test("topic summaries do not alter flashcards, sessions, Progress, or Overview", () => {
   assert.doesNotMatch(migration, /ALTER TABLE public\.(?:question_sets|question_sessions|flashcard_sets|flashcards|flashcard_reviews|documents)/u);
   assert.doesNotMatch(migration, /UPDATE public\.(?:question_sets|question_sessions|flashcard_sets|flashcards|flashcard_reviews)/u);
-  assert.doesNotMatch(flashcards, /topicId|topic_id/u);
 });

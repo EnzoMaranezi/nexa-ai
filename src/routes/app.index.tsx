@@ -279,7 +279,7 @@ function Dashboard() {
             </p>
           ) : flashcardOverview.totalDue > 0 ? (
             (() => {
-              const primary = flashcardOverview.dueByDocument[0]!;
+              const primary = flashcardOverview.dueByScope[0]!;
               return (
                 <div className="mt-5 flex flex-col justify-between gap-6 md:flex-row md:items-end">
                   <div>
@@ -292,16 +292,32 @@ function Dashboard() {
                       )}
                     </h2>
                     <p className="mt-3 text-sm text-muted-foreground">
-                      {t("overview.flashcardsDueMaterial", { title: primary.documentTitle })}
+                      {t(
+                        primary.topicId
+                          ? "overview.flashcardsDueTopic"
+                          : "overview.flashcardsDueMaterial",
+                        { title: primary.topicTitle ?? primary.documentTitle },
+                      )}
                     </p>
                   </div>
-                  <Link
-                    to="/app/flashcards/$documentId"
-                    params={{ documentId: primary.documentId }}
-                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-lime px-6 py-3 text-sm font-medium text-background transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--glow-lime)]"
-                  >
-                    {t("overview.reviewFlashcardsNow")} <span aria-hidden>→</span>
-                  </Link>
+                  {primary.topicId ? (
+                    <Link
+                      to="/app/materials/$documentId/topics/$topicId"
+                      params={{ documentId: primary.documentId, topicId: primary.topicId }}
+                      hash="flashcards"
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-lime px-6 py-3 text-sm font-medium text-background transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--glow-lime)]"
+                    >
+                      {t("overview.reviewFlashcardsNow")} <span aria-hidden>→</span>
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/app/flashcards/$documentId"
+                      params={{ documentId: primary.documentId }}
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-lime px-6 py-3 text-sm font-medium text-background transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--glow-lime)]"
+                    >
+                      {t("overview.reviewFlashcardsNow")} <span aria-hidden>→</span>
+                    </Link>
+                  )}
                 </div>
               );
             })()

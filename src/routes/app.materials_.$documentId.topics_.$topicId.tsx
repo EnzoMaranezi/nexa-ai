@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { AppCard, AppLabel, ErrorState, Skeleton } from "@/components/app/ui";
 import { DocumentSummaryPanel } from "@/components/app/DocumentSummary";
 import { DocumentQuestionsPanel } from "@/components/app/DocumentQuestions";
+import { DocumentFlashcardsPanel } from "@/components/app/DocumentFlashcards";
 import {
   getDocumentTopic,
   STALE_TOPIC_SOURCE,
@@ -94,6 +95,7 @@ function DocumentTopicDetailPage() {
             topicId={state.topic.id}
           />
           <DocumentQuestionsPanel documentId={state.document.id} topicId={state.topic.id} />
+          <DocumentFlashcardsPanel documentId={state.document.id} topicId={state.topic.id} />
         </>
       ) : null}
     </div>

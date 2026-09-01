@@ -11,7 +11,7 @@ import { GeneratedContentLanguageState } from "@/components/app/GeneratedContent
 
 type FlashcardMode = "review" | "browse";
 
-export function DocumentFlashcardsPanel({ documentId }: { documentId: string }) {
+export function DocumentFlashcardsPanel({ documentId, topicId }: { documentId: string; topicId?: string }) {
   const { locale, t } = useI18n();
   const [cards, setCards] = useState<StoredFlashcard[] | null>(null);
   const [flashcardSetId, setFlashcardSetId] = useState<string | null>(null);
@@ -40,6 +40,8 @@ export function DocumentFlashcardsPanel({ documentId }: { documentId: string }) 
   useEffect(() => {
     let cancelled = false;
     setChecking(true);
+    setError(null);
+    setNotice(null);
     setReviewedThisSession(false);
     setCards(null);
     setFlashcardSetId(null);
@@ -51,11 +53,11 @@ export function DocumentFlashcardsPanel({ documentId }: { documentId: string }) 
     setIndex(0);
     setRevealed(false);
     setComplete(false);
-    getDocumentFlashcards({ data: { documentId } }).then(async (availability) => {
+    getDocumentFlashcards({ data: { documentId, topicId } }).then(async (availability) => {
       const deck = availability.current;
       const queue = deck
         ? await getDocumentFlashcardReviewQueue({
-            data: { documentId, flashcardSetId: deck.id },
+            data: { documentId, flashcardSetId: deck.id, topicId },
           })
         : null;
       if (!cancelled) {
@@ -66,9 +68,11 @@ export function DocumentFlashcardsPanel({ documentId }: { documentId: string }) 
         setDueCards(queue?.dueCards ?? []);
         setNextDueAt(queue?.nextDueAt ?? null);
       }
-    }).catch(() => undefined).finally(() => { if (!cancelled) setChecking(false); });
+    }).catch((cause: unknown) => {
+      if (!cancelled) setError(flashcardTopicError(cause, t, t("flashcards.errorLoad")));
+    }).finally(() => { if (!cancelled) setChecking(false); });
     return () => { cancelled = true; };
-  }, [documentId, locale]);
+  }, [documentId, locale, topicId]);
 
   useEffect(() => {
     if (!cards || dueCards.length > 0 || !nextDueAt) return;
@@ -85,7 +89,7 @@ export function DocumentFlashcardsPanel({ documentId }: { documentId: string }) 
       setNextDueAt(null);
       return;
     }
-    const queue = await getDocumentFlashcardReviewQueue({ data: { documentId, flashcardSetId: setId } });
+    const queue = await getDocumentFlashcardReviewQueue({ data: { documentId, flashcardSetId: setId, topicId } });
     setDueCards(queue?.dueCards ?? []);
     setNextDueAt(queue?.nextDueAt ?? null);
   }
@@ -93,14 +97,17 @@ export function DocumentFlashcardsPanel({ documentId }: { documentId: string }) 
   async function generate() {
     setGenerating(true); setError(null);
     try {
-      const deck = await generateDocumentFlashcards({ data: { documentId } });
+      const deck = await generateDocumentFlashcards({ data: { documentId, topicId } });
       setCards(deck.cards);
       setFlashcardSetId(deck.id);
       setCurrentAvailable(true);
       await refreshReviewQueue(deck.id);
       setMode("review"); setIndex(0); setRevealed(false); setComplete(false); setReviewedThisSession(false);
     }
-    catch (cause) { setError(aiErrorMessage(cause, t, t("flashcards.errorGenerate"))); }
+    catch (cause) {
+      const topicError = flashcardTopicError(cause, t, "");
+      setError(topicError || aiErrorMessage(cause, t, t("flashcards.errorGenerate")));
+    }
     finally { setGenerating(false); }
   }
 
@@ -153,10 +160,10 @@ export function DocumentFlashcardsPanel({ documentId }: { documentId: string }) 
     { rating: "easy", label: t("flashcards.ratingEasy") },
   ];
 
-  return <AppCard>
+  return <div id="flashcards"><AppCard>
     <AppLabel>{cards ? t("flashcards.savedLabel") : t("flashcards.readyLabel")}</AppLabel>
     <p className="mt-4 text-sm text-muted-foreground">{checking ? t("flashcards.checking") : cards ? t("flashcards.saved") : t("flashcards.ready")}</p>
-    {!checking && !cards && alternatives.length === 0 ? <PrimaryButton className="mt-6" onClick={() => void generate()} disabled={generating}>
+    {!checking && !error && !cards && alternatives.length === 0 ? <PrimaryButton className="mt-6" onClick={() => void generate()} disabled={generating}>
       {generating ? t("flashcards.generating") : t("flashcards.generate")} <Sparkles className="size-4" aria-hidden />
     </PrimaryButton> : null}
     {!checking && !currentAvailable && alternatives.length > 0 ? <GeneratedContentLanguageState
@@ -202,5 +209,18 @@ export function DocumentFlashcardsPanel({ documentId }: { documentId: string }) 
       <div className="mt-6 flex flex-wrap gap-3"><GhostButton onClick={() => move(-1)} disabled={index === 0}>{t("flashcards.previous")}</GhostButton><PrimaryButton onClick={() => move(1)}>{index === cards.length - 1 ? t("flashcards.finish") : t("flashcards.next")}</PrimaryButton></div>
     </div> : null}
     {cards && mode === "browse" && complete ? <div className="mt-8 border-t border-border pt-8"><AppLabel>{t("flashcards.complete")}</AppLabel><p className="mt-3 text-sm text-muted-foreground">{t("flashcards.completeBody")}</p><PrimaryButton className="mt-6" onClick={restart}><RotateCcw className="size-4" />{t("flashcards.restart")}</PrimaryButton></div> : null}
-  </AppCard>;
+  </AppCard></div>;
+}
+
+function flashcardTopicError(
+  cause: unknown,
+  t: (key: string) => string,
+  fallback: string,
+) {
+  const message = cause instanceof Error ? cause.message : "";
+  if (message.includes("STALE_TOPIC_SOURCE")) return t("flashcards.topicStale");
+  if (message.includes("TOPIC_NOT_FOUND")) return t("flashcards.topicMissing");
+  if (message.includes("INVALID_TOPIC_SOURCE_RANGE")) return t("flashcards.topicInvalidSource");
+  if (message.includes("TOPIC_SOURCE_UNAVAILABLE")) return t("flashcards.topicInsufficient");
+  return fallback;
 }

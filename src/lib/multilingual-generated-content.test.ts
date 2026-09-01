@@ -100,7 +100,10 @@ test("generation captures one verified locale context and uses it for cache, quo
     questions,
     /reserveAiGeneration\(supabase, "questions", doc\.id, localeContext\.locale, topicId\)/,
   );
-  assert.match(flashcards, /reserveAiGeneration\(supabase, "flashcards", doc\.id, localeContext\.locale\)/);
+  assert.match(
+    flashcards,
+    /reserveAiGeneration\(supabase, "flashcards", doc\.id, localeContext\.locale, topicId\)/,
+  );
 });
 
 test("normal question cache excludes practice and superseded sets", () => {

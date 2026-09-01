@@ -24,10 +24,10 @@ const schedulingMigration = readFileSync(
 const NOW = new Date("2026-08-24T12:00:00.000Z");
 
 const sets: FlashcardOverviewSetRow[] = [
-  { id: "pt-a", documentId: "doc-a", documentTitle: "Algoritmos", locale: "pt-BR" },
-  { id: "pt-b", documentId: "doc-b", documentTitle: "Estruturas", locale: "pt-BR" },
-  { id: "en-a", documentId: "doc-a", documentTitle: "Algorithms", locale: "en" },
-  { id: "legacy-a", documentId: "doc-a", documentTitle: "Legacy", locale: "und" },
+  { id: "pt-a", documentId: "doc-a", documentTitle: "Algoritmos", topicId: null, topicTitle: null, locale: "pt-BR" },
+  { id: "pt-b", documentId: "doc-b", documentTitle: "Estruturas", topicId: null, topicTitle: null, locale: "pt-BR" },
+  { id: "en-a", documentId: "doc-a", documentTitle: "Algorithms", topicId: null, topicTitle: null, locale: "en" },
+  { id: "legacy-a", documentId: "doc-a", documentTitle: "Legacy", topicId: null, topicTitle: null, locale: "und" },
 ];
 
 function card(flashcardSetId: string, dueAt: string): FlashcardOverviewCardRow {
@@ -47,7 +47,7 @@ test("PT-BR counts only due cards from PT-BR decks", () => {
   });
 
   assert.equal(overview.totalDue, 1);
-  assert.equal(overview.dueByDocument[0]?.documentTitle, "Algoritmos");
+  assert.equal(overview.dueByScope[0]?.documentTitle, "Algoritmos");
 });
 
 test("English counts only due cards from English decks", () => {
@@ -63,7 +63,7 @@ test("English counts only due cards from English decks", () => {
   });
 
   assert.equal(overview.totalDue, 1);
-  assert.equal(overview.dueByDocument[0]?.documentTitle, "Algorithms");
+  assert.equal(overview.dueByScope[0]?.documentTitle, "Algorithms");
 });
 
 test("multiple due documents are ordered by count, oldest overdue, then document id", () => {
@@ -81,10 +81,10 @@ test("multiple due documents are ordered by count, oldest overdue, then document
 
   assert.equal(overview.totalDue, 4);
   assert.deepEqual(
-    overview.dueByDocument.map((document) => document.documentId),
+    overview.dueByScope.map((scope) => scope.documentId),
     ["doc-b", "doc-a"],
   );
-  assert.equal(overview.dueByDocument[0]?.oldestDueAt, "2026-08-24T08:00:00.000Z");
+  assert.equal(overview.dueByScope[0]?.oldestDueAt, "2026-08-24T08:00:00.000Z");
 });
 
 test("a card due exactly now is included and overdue cards remain due", () => {
@@ -127,7 +127,7 @@ test("no active-locale decks is distinct from a deck with no due cards", () => {
     locale: "en",
     hasDecks: false,
     totalDue: 0,
-    dueByDocument: [],
+    dueByScope: [],
     nextDueAt: null,
   });
 });
@@ -153,10 +153,73 @@ test("server query is authenticated, locale-scoped, indexed, and owner-isolated 
   );
 });
 
-test("Overview refreshes on locale changes and Review now targets the existing route", () => {
+test("document and topic decks are counted separately and preserve topic metadata", () => {
+  const overview = buildFlashcardReviewOverview({
+    locale: "pt-BR",
+    sets: [
+      sets[0]!,
+      {
+        id: "pt-topic-a",
+        documentId: "doc-a",
+        documentTitle: "Algoritmos",
+        topicId: "topic-a",
+        topicTitle: "Ordenacao",
+        locale: "pt-BR",
+      },
+    ],
+    cards: [
+      card("pt-a", "2026-08-24T11:00:00.000Z"),
+      card("pt-topic-a", "2026-08-24T10:00:00.000Z"),
+    ],
+    now: NOW,
+  });
+
+  assert.equal(overview.totalDue, 2);
+  assert.equal(overview.dueByScope.length, 2);
+  assert.equal(overview.dueByScope[0]?.topicId, "topic-a");
+  assert.equal(overview.dueByScope[0]?.topicTitle, "Ordenacao");
+  assert.equal(overview.dueByScope[1]?.topicId, null);
+});
+
+test("same topic in another locale is excluded from the active locale", () => {
+  const overview = buildFlashcardReviewOverview({
+    locale: "pt-BR",
+    sets: [
+      {
+        id: "pt-topic-a",
+        documentId: "doc-a",
+        documentTitle: "Algoritmos",
+        topicId: "topic-a",
+        topicTitle: "Ordenacao",
+        locale: "pt-BR",
+      },
+      {
+        id: "en-topic-a",
+        documentId: "doc-a",
+        documentTitle: "Algorithms",
+        topicId: "topic-a",
+        topicTitle: "Sorting",
+        locale: "en",
+      },
+    ],
+    cards: [
+      card("pt-topic-a", "2026-08-24T11:00:00.000Z"),
+      card("en-topic-a", "2026-08-24T10:00:00.000Z"),
+    ],
+    now: NOW,
+  });
+
+  assert.equal(overview.totalDue, 1);
+  assert.equal(overview.dueByScope[0]?.flashcardSetId, "pt-topic-a");
+});
+
+test("Overview refreshes on locale changes and Review now targets document and topic routes", () => {
   assert.match(overviewSource, /getFlashcardReviewOverview\(\)[\s\S]*\[locale\]/);
   assert.match(overviewSource, /to="\/app\/flashcards\/\$documentId"/);
   assert.match(overviewSource, /params=\{\{ documentId: primary\.documentId \}\}/);
+  assert.match(overviewSource, /to="\/app\/materials\/\$documentId\/topics\/\$topicId"/);
+  assert.match(overviewSource, /topicId: primary\.topicId/);
+  assert.match(overviewSource, /hash="flashcards"/);
 });
 
 test("Overview due retrieval has no AI provider or quota side effects", () => {

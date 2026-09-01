@@ -4,6 +4,8 @@ export interface FlashcardOverviewSetRow {
   id: string;
   documentId: string;
   documentTitle: string;
+  topicId: string | null;
+  topicTitle: string | null;
   locale: PersistedContentLocale;
 }
 
@@ -12,9 +14,12 @@ export interface FlashcardOverviewCardRow {
   dueAt: string;
 }
 
-export interface DueFlashcardDocument {
+export interface DueFlashcardScope {
+  flashcardSetId: string;
   documentId: string;
   documentTitle: string;
+  topicId: string | null;
+  topicTitle: string | null;
   dueCount: number;
   oldestDueAt: string;
 }
@@ -23,7 +28,7 @@ export interface FlashcardReviewOverview {
   locale: Locale;
   hasDecks: boolean;
   totalDue: number;
-  dueByDocument: DueFlashcardDocument[];
+  dueByScope: DueFlashcardScope[];
   nextDueAt: string | null;
 }
 
@@ -40,7 +45,7 @@ export function buildFlashcardReviewOverview({
 }): FlashcardReviewOverview {
   const activeSets = sets.filter((set) => set.locale === locale);
   const setsById = new Map(activeSets.map((set) => [set.id, set]));
-  const dueByDocument = new Map<string, DueFlashcardDocument>();
+  const dueByScope = new Map<string, DueFlashcardScope>();
   const nowMs = now.getTime();
   let nextDueMs = Number.POSITIVE_INFINITY;
 
@@ -56,32 +61,35 @@ export function buildFlashcardReviewOverview({
       continue;
     }
 
-    const existing = dueByDocument.get(set.documentId);
+    const existing = dueByScope.get(set.id);
     if (existing) {
       existing.dueCount += 1;
       if (dueMs < Date.parse(existing.oldestDueAt)) existing.oldestDueAt = card.dueAt;
     } else {
-      dueByDocument.set(set.documentId, {
+      dueByScope.set(set.id, {
+        flashcardSetId: set.id,
         documentId: set.documentId,
         documentTitle: set.documentTitle,
+        topicId: set.topicId,
+        topicTitle: set.topicTitle,
         dueCount: 1,
         oldestDueAt: card.dueAt,
       });
     }
   }
 
-  const orderedDocuments = [...dueByDocument.values()].sort(
+  const orderedScopes = [...dueByScope.values()].sort(
     (a, b) =>
       b.dueCount - a.dueCount ||
       Date.parse(a.oldestDueAt) - Date.parse(b.oldestDueAt) ||
-      a.documentId.localeCompare(b.documentId),
+      a.flashcardSetId.localeCompare(b.flashcardSetId),
   );
 
   return {
     locale,
     hasDecks: activeSets.length > 0,
-    totalDue: orderedDocuments.reduce((total, document) => total + document.dueCount, 0),
-    dueByDocument: orderedDocuments,
+    totalDue: orderedScopes.reduce((total, scope) => total + scope.dueCount, 0),
+    dueByScope: orderedScopes,
     nextDueAt: Number.isFinite(nextDueMs) ? new Date(nextDueMs).toISOString() : null,
   };
 }

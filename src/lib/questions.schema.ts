@@ -47,6 +47,14 @@ export type PerformanceBand =
   | "Consider reviewing the material"
   | "We recommend reviewing the material before another session";
 
+export const performanceBandTranslationKeys: Record<PerformanceBand, string> = {
+  "Excellent performance": "results.performance.excellent",
+  "Good performance": "results.performance.good",
+  "Consider reviewing the material": "results.performance.review",
+  "We recommend reviewing the material before another session":
+    "results.performance.reviewBeforeNext",
+};
+
 /** Shared classification so the result screen and stored results never diverge. */
 export function classifyPerformance(accuracy: number): PerformanceBand {
   if (accuracy >= 90) return "Excellent performance";

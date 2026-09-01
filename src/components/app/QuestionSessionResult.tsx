@@ -3,7 +3,12 @@ import { motion } from "motion/react";
 import { Check, X, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { AppLabel, GhostButton, ProgressBar } from "@/components/app/ui";
-import { classifyPerformance, type SessionAnswer, type StudyQuestion } from "@/lib/questions.schema";
+import {
+  classifyPerformance,
+  performanceBandTranslationKeys,
+  type SessionAnswer,
+  type StudyQuestion,
+} from "@/lib/questions.schema";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +76,7 @@ export function QuestionSessionResult({
         <p className="mt-2 text-sm text-muted-foreground">
           {t("results.correctOf", { correct, total })}
         </p>
-        <p className="mt-4 text-lg">{band}</p>
+        <p className="mt-4 text-lg">{t(performanceBandTranslationKeys[band])}</p>
         <ProgressBar value={accuracy} className="mt-6" label={t("results.sessionAccuracy")} />
       </div>
 

@@ -335,6 +335,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "results.practiceMistakes": "Practice my mistakes",
     "results.preparingPractice": "Preparing practice...",
     "results.recorded": "Recorded result",
+    "results.performance.excellent": "Excellent performance",
+    "results.performance.good": "Good performance",
+    "results.performance.review": "Consider reviewing the material",
+    "results.performance.reviewBeforeNext":
+      "We recommend reviewing the material before another session",
     "plan.title": "Your study plan",
     "plan.guidedReady": "Guided session ready",
     "plan.knowledgeMap": "Knowledge map",
@@ -924,6 +929,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "results.practiceMistakes": "Praticar meus erros",
     "results.preparingPractice": "Preparando pratica...",
     "results.recorded": "Resultado registrado",
+    "results.performance.excellent": "Excelente desempenho",
+    "results.performance.good": "Bom desempenho",
+    "results.performance.review": "Considere revisar o material",
+    "results.performance.reviewBeforeNext":
+      "Recomendamos revisar o material antes de outra sessao",
     "plan.title": "Seu plano de estudo",
     "plan.guidedReady": "Sessao guiada pronta",
     "plan.knowledgeMap": "Mapa de conhecimento",

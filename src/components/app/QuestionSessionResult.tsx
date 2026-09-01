@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   documentId: string;
+  topicId?: string;
   questions: StudyQuestion[];
   answers: SessionAnswer[];
   saving?: boolean;
@@ -38,6 +39,7 @@ function getQuestionPrompt(question: StudyQuestion) {
 /** Post-session performance screen: accuracy, classification and per-question review. */
 export function QuestionSessionResult({
   documentId,
+  topicId,
   questions,
   answers,
   saving = false,
@@ -197,13 +199,23 @@ export function QuestionSessionResult({
             {t("results.seeAreas")} <span aria-hidden>→</span>
           </Link>
         ) : null}
-        <Link
-          to="/app/summary/$documentId"
-          params={{ documentId }}
-          className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-6 py-3 text-sm transition-colors hover:border-lime/40 hover:bg-surface-2"
-        >
-          {t("common.reviewMaterial")} <span aria-hidden>→</span>
-        </Link>
+        {topicId ? (
+          <Link
+            to="/app/materials/$documentId/topics/$topicId"
+            params={{ documentId, topicId }}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-6 py-3 text-sm transition-colors hover:border-lime/40 hover:bg-surface-2"
+          >
+            {t("common.reviewMaterial")} <span aria-hidden>→</span>
+          </Link>
+        ) : (
+          <Link
+            to="/app/summary/$documentId"
+            params={{ documentId }}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-6 py-3 text-sm transition-colors hover:border-lime/40 hover:bg-surface-2"
+          >
+            {t("common.reviewMaterial")} <span aria-hidden>→</span>
+          </Link>
+        )}
         {onNewSession ? (
           <GhostButton onClick={onNewSession}>
             {t("results.newSession")} <span aria-hidden>→</span>

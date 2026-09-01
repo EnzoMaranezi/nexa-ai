@@ -21,6 +21,7 @@ import type { PersistedContentLocale } from "@/lib/i18n";
 
 interface Props {
   documentId: string;
+  topicId?: string;
 }
 
 type AnswerState = { selected: number; correct: boolean };
@@ -50,7 +51,7 @@ function getQuestionPrompt(question: StudyQuestion) {
 }
 
 /** Generates, stores and plays a 5-question multiple-choice set for one material. */
-export function DocumentQuestionsPanel({ documentId }: Props) {
+export function DocumentQuestionsPanel({ documentId, topicId }: Props) {
   const { locale, t } = useI18n();
   const [questions, setQuestions] = useState<StudyQuestion[] | null>(null);
   const [questionSetId, setQuestionSetId] = useState<string | null>(null);
@@ -93,12 +94,13 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
     setRestorableSession(null);
     setSelected(null);
     setIndex(0);
+    setError(null);
     persistedRef.current = false;
     startedAtRef.current = new Date().toISOString();
     Promise.all([
-      getActiveQuestionSession({ data: { documentId } }).catch(() => null),
-      getDocumentQuestions({ data: { documentId } }).catch(() => null),
-      getLatestQuestionSession({ data: { documentId } }).catch(() => null),
+      getActiveQuestionSession({ data: { documentId, topicId } }).catch(() => null),
+      getDocumentQuestions({ data: { documentId, topicId } }),
+      getLatestQuestionSession({ data: { documentId, topicId } }).catch(() => null),
     ])
       .then(([active, res, session]) => {
         if (cancelled) return;
@@ -132,19 +134,22 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
           setSavedResult({ answers: session.answers, accuracy: session.accuracy });
         }
       })
+      .catch((cause: unknown) => {
+        if (!cancelled) setError(questionErrorMessage(cause, t, Boolean(topicId), false));
+      })
       .finally(() => {
         if (!cancelled) setLoadingExisting(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [documentId, locale]);
+  }, [documentId, topicId, locale]);
 
   async function generate(regenerate = false) {
     setGenerating(true);
     setError(null);
     try {
-      const res = await generateDocumentQuestions({ data: { documentId, regenerate } });
+      const res = await generateDocumentQuestions({ data: { documentId, topicId, regenerate } });
       setQuestions(res.questions);
       setQuestionSetId(res.id);
       setCurrentAvailable(true);
@@ -158,7 +163,7 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
       setSelected(null);
       setIndex(0);
     } catch (err) {
-      setError(aiErrorMessage(err, t, t("questions.errorGenerate")));
+      setError(questionErrorMessage(err, t, Boolean(topicId), false));
     } finally {
       setGenerating(false);
     }
@@ -188,7 +193,7 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
       setSelected(null);
       setIndex(0);
     } catch (err) {
-      setError(aiErrorMessage(err, t, t("questions.errorPractice")));
+      setError(questionErrorMessage(err, t, Boolean(topicId), true));
     } finally {
       setPractising(false);
     }
@@ -272,7 +277,7 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
     <AppCard>
       <AppLabel>{t("questions.panel")}</AppLabel>
       <p className="mt-4 text-sm text-muted-foreground">
-        {t("questions.description")}
+        {t(topicId ? "topics.questionsDescription" : "questions.description")}
       </p>
 
       <div className="mt-6 flex flex-wrap gap-3">
@@ -357,7 +362,7 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
 
       {generating && !questions ? (
         <p className="mt-6 font-mono text-xs text-muted-foreground" aria-live="polite">
-          {t("questions.reading")}
+          {t(topicId ? "topics.questionsReading" : "questions.reading")}
         </p>
       ) : null}
 
@@ -441,6 +446,7 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
       {questions && completed ? (
         <QuestionSessionResult
           documentId={documentId}
+          {...(topicId ? { topicId } : {})}
           questions={questions}
           answers={sessionAnswers}
           saving={saving}
@@ -456,6 +462,7 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
       ) : questions && !completed && answeredCount === 0 && savedResult ? (
         <QuestionSessionResult
           documentId={documentId}
+          {...(topicId ? { topicId } : {})}
           questions={questions}
           answers={savedResult.answers}
           heading={t("results.lastSession")}
@@ -470,5 +477,28 @@ export function DocumentQuestionsPanel({ documentId }: Props) {
       ) : null}
 
     </AppCard>
+  );
+}
+
+function questionErrorMessage(
+  error: unknown,
+  t: (key: string) => string,
+  topicScoped: boolean,
+  practice: boolean,
+) {
+  const message = error instanceof Error ? error.message : "";
+  if (topicScoped) {
+    if (message.includes("STALE_TOPIC_SOURCE")) return t("topics.questionsStale");
+    if (message.includes("TOPIC_SOURCE_UNAVAILABLE")) return t("topics.questionsSourceUnavailable");
+    if (message.includes("INVALID_TOPIC_SOURCE_RANGE")) return t("topics.questionsSourceInvalid");
+    if (message.includes("TOPIC_QUESTION_SOURCE_INSUFFICIENT")) {
+      return t("topics.questionsSourceInsufficient");
+    }
+    if (message.includes("TOPIC_NOT_FOUND")) return t("topics.topicMissing");
+  }
+  return aiErrorMessage(
+    error,
+    t,
+    t(practice ? "questions.errorPractice" : "questions.errorGenerate"),
   );
 }

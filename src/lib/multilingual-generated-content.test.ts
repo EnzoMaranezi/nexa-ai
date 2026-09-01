@@ -96,7 +96,10 @@ test("generation captures one verified locale context and uses it for cache, quo
   assert.match(summaries, /loadSummaryVariant\([\s\S]*documentRow\.id,[\s\S]*localeContext\.locale,[\s\S]*topicId/);
   assert.match(summaries, /reserveAiGeneration\([\s\S]*"summary",[\s\S]*documentRow\.id,[\s\S]*localeContext\.locale,[\s\S]*topicId/);
   assert.match(summaries, /p_locale: localeContext\.locale/);
-  assert.match(questions, /reserveAiGeneration\(supabase, "questions", doc\.id, localeContext\.locale\)/);
+  assert.match(
+    questions,
+    /reserveAiGeneration\(supabase, "questions", doc\.id, localeContext\.locale, topicId\)/,
+  );
   assert.match(flashcards, /reserveAiGeneration\(supabase, "flashcards", doc\.id, localeContext\.locale\)/);
 });
 
@@ -110,7 +113,8 @@ test("normal question cache excludes practice and superseded sets", () => {
 });
 
 test("practice generation keeps the original standard-set locale", () => {
-  assert.match(questions, /const practiceLocale = previousSet\.locale/);
+  assert.match(questions, /const practiceLocale = sourceSet\.locale/);
+  assert.match(questions, /sourceSet\.locale !== previousSet\.locale/);
   assert.match(questions, /previousSet\.kind === "practice"[\s\S]*previousSet\.source_question_set_id/);
   assert.match(questions, /languageInstruction\(practiceLocale\)/);
   assert.match(questions, /p_source_question_set_id: sourceQuestionSetId/);

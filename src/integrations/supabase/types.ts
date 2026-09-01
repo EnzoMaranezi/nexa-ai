@@ -252,6 +252,8 @@ export type Database = {
           questions: Json
           source_question_set_id: string | null
           superseded_at: string | null
+          topic_id: string | null
+          topic_scope_id: string | null
           updated_at: string
           user_id: string
         }
@@ -265,6 +267,8 @@ export type Database = {
           questions: Json
           source_question_set_id?: string | null
           superseded_at?: string | null
+          topic_id?: string | null
+          topic_scope_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -278,6 +282,8 @@ export type Database = {
           questions?: Json
           source_question_set_id?: string | null
           superseded_at?: string | null
+          topic_id?: string | null
+          topic_scope_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -294,6 +300,13 @@ export type Database = {
             columns: ["source_question_set_id"]
             isOneToOne: false
             referencedRelation: "question_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "question_sets_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "document_topics"
             referencedColumns: ["id"]
           },
         ]
@@ -385,6 +398,7 @@ export type Database = {
           p_model: string | null
           p_questions: Json
           p_source_question_set_id?: string | null
+          p_topic_id?: string | null
         }
         Returns: string
       }

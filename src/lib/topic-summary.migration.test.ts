@@ -140,12 +140,11 @@ test("topic detail reuses the summary and language-mismatch UI without automatic
   assert.match(topicRoute, /<DocumentSummaryPanel[\s\S]*topicId=\{state\.topic\.id\}/u);
   assert.match(summaries, /resolveSummaryAvailability\(variants, locale\)/u);
   assert.doesNotMatch(topicRoute, /generateDocumentSummary/u);
-  assert.match(topicRoute, /topics\.detailComingBody/u);
+  assert.match(topicRoute, /<DocumentQuestionsPanel[\s\S]*topicId=\{state\.topic\.id\}/u);
 });
 
-test("topic summaries do not alter questions, flashcards, sessions, Progress, or Overview", () => {
+test("topic summaries do not alter flashcards, sessions, Progress, or Overview", () => {
   assert.doesNotMatch(migration, /ALTER TABLE public\.(?:question_sets|question_sessions|flashcard_sets|flashcards|flashcard_reviews|documents)/u);
   assert.doesNotMatch(migration, /UPDATE public\.(?:question_sets|question_sessions|flashcard_sets|flashcards|flashcard_reviews)/u);
-  assert.doesNotMatch(questions, /topicId|topic_id/u);
   assert.doesNotMatch(flashcards, /topicId|topic_id/u);
 });

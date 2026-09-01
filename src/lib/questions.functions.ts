@@ -28,8 +28,14 @@ import {
   type Locale,
   type PersistedContentLocale,
 } from "@/lib/i18n";
+import {
+  parseTopicSummarySourceRanges,
+  reconstructVerifiedTopicSource,
+} from "@/lib/topic-summary-source";
 
 const MAX_INPUT_CHARS = 60_000;
+const MIN_QUESTION_SOURCE_CHARS = 200;
+export const TOPIC_QUESTION_SOURCE_INSUFFICIENT = "TOPIC_QUESTION_SOURCE_INSUFFICIENT";
 
 const SYSTEM_PROMPT = `You are NEXA, an academic study agent.
 You write multiple-choice study questions based EXCLUSIVELY on the material provided by the user.
@@ -179,6 +185,58 @@ type QuestionVariant = {
   questions: StudyQuestion[];
 };
 
+type QuestionDocument = {
+  id: string;
+  title: string;
+  user_id: string;
+  extracted_text: string | null;
+};
+
+async function loadOwnedQuestionDocument(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  documentId: string,
+) {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("id, title, user_id, extracted_text")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (error || !data || data.user_id !== userId) throw new Error("Document not found.");
+  return data satisfies QuestionDocument;
+}
+
+async function loadTopicQuestionContext(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  document: QuestionDocument,
+  topicId: string,
+) {
+  const { data: topic, error } = await supabase
+    .from("document_topics")
+    .select("id, user_id, document_id, title, source_ranges, source_hash")
+    .eq("id", topicId)
+    .maybeSingle();
+  if (
+    error ||
+    !topic ||
+    topic.user_id !== userId ||
+    topic.document_id !== document.id
+  ) {
+    throw new Error("TOPIC_NOT_FOUND");
+  }
+
+  const sourceText = await reconstructVerifiedTopicSource({
+    source: document.extracted_text,
+    sourceRanges: parseTopicSummarySourceRanges(topic.source_ranges),
+    sourceHash: topic.source_hash,
+  });
+  if (sourceText.replace(/\s+/gu, "").length < MIN_QUESTION_SOURCE_CHARS) {
+    throw new Error(TOPIC_QUESTION_SOURCE_INSUFFICIENT);
+  }
+  return { id: topic.id, title: topic.title, sourceText };
+}
+
 function mapQuestionVariant(row: {
   id: string;
   locale: string;
@@ -197,15 +255,19 @@ async function loadCurrentStandardSet(
   supabase: SupabaseClient<Database>,
   documentId: string,
   locale: Locale,
+  topicId: string | null = null,
 ) {
-  const { data, error } = await supabase
+  const query = supabase
     .from("question_sets")
     .select("id, locale, questions, created_at")
     .eq("document_id", documentId)
     .eq("locale", locale)
     .eq("kind", "standard")
-    .is("superseded_at", null)
-    .maybeSingle();
+    .is("superseded_at", null);
+  const { data, error } = await (topicId
+    ? query.eq("topic_scope_id", topicId)
+    : query.is("topic_scope_id", null)
+  ).maybeSingle();
   if (error) throw new Error(error.message);
   return data ? mapQuestionVariant(data) : null;
 }
@@ -215,10 +277,11 @@ async function waitForQuestionSet(
   documentId: string,
   locale: Locale,
   previousSetId: string | null,
+  topicId: string | null = null,
 ) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500));
-    const set = await loadCurrentStandardSet(supabase, documentId, locale);
+    const set = await loadCurrentStandardSet(supabase, documentId, locale, topicId);
     if (set && set.id !== previousSetId) return set;
   }
   return null;
@@ -226,15 +289,25 @@ async function waitForQuestionSet(
 
 export const getDocumentQuestions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
+  .inputValidator((data: unknown) =>
+    z.object({ documentId: z.string().uuid(), topicId: z.string().uuid().optional() }).parse(data),
+  )
   .handler(async ({ data, context }) => {
-    const { supabase, claims } = context;
+    const { supabase, userId, claims } = context;
     const { locale } = getAiLocaleContext(claims);
-    const { data: rows, error } = await supabase
+    const topicId = data.topicId ?? null;
+    if (topicId) {
+      const document = await loadOwnedQuestionDocument(supabase, userId, data.documentId);
+      await loadTopicQuestionContext(supabase, userId, document, topicId);
+    }
+    const query = supabase
       .from("question_sets")
       .select("id, locale, kind, superseded_at, questions, created_at")
       .eq("document_id", data.documentId)
       .order("created_at", { ascending: false });
+    const { data: rows, error } = await (topicId
+      ? query.eq("topic_scope_id", topicId)
+      : query.is("topic_scope_id", null));
     if (error) throw new Error(error.message);
     const visibleRows = (rows ?? []).filter(
       (row) => row.kind === "legacy" || (row.kind === "standard" && !row.superseded_at),
@@ -256,30 +329,29 @@ export const getDocumentQuestions = createServerFn({ method: "POST" })
 export const generateDocumentQuestions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) =>
-    z.object({ documentId: z.string().uuid(), regenerate: z.boolean().optional() }).parse(data),
+    z.object({
+      documentId: z.string().uuid(),
+      topicId: z.string().uuid().optional(),
+      regenerate: z.boolean().optional(),
+    }).parse(data),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId, claims } = context;
     const localeContext = getAiLocaleContext(claims);
 
-    const { data: doc, error: docError } = await supabase
-      .from("documents")
-      .select("id, title, user_id, extracted_text")
-      .eq("id", data.documentId)
-      .maybeSingle();
-
-    if (docError || !doc || doc.user_id !== userId) {
-      throw new Error("Document not found.");
-    }
-
-    if (!doc.extracted_text || doc.extracted_text.trim().length < 200) {
+    const doc = await loadOwnedQuestionDocument(supabase, userId, data.documentId);
+    const topicId = data.topicId ?? null;
+    const topic = topicId
+      ? await loadTopicQuestionContext(supabase, userId, doc, topicId)
+      : null;
+    if (!topic && (!doc.extracted_text || doc.extracted_text.trim().length < MIN_QUESTION_SOURCE_CHARS)) {
       throw new Error(
         "This document has no readable extracted text yet. Process the PDF before generating questions.",
       );
     }
-    const extractedText = doc.extracted_text;
+    const questionSource = topic?.sourceText ?? doc.extracted_text!;
 
-    const existing = await loadCurrentStandardSet(supabase, doc.id, localeContext.locale);
+    const existing = await loadCurrentStandardSet(supabase, doc.id, localeContext.locale, topicId);
     if (!data.regenerate) {
       if (existing) {
         return {
@@ -292,11 +364,13 @@ export const generateDocumentQuestions = createServerFn({ method: "POST" })
     try {
       const saved = await runReservedAiGeneration({
         reserve: () =>
-          reserveAiGeneration(supabase, "questions", doc.id, localeContext.locale),
+          reserveAiGeneration(supabase, "questions", doc.id, localeContext.locale, topicId),
         generate: () =>
           generateAiText({
             system: SYSTEM_PROMPT,
-            prompt: `Document title: ${doc.title}\n\nMATERIAL (the only allowed source):\n"""\n${extractedText.slice(0, MAX_INPUT_CHARS)}\n"""\n\nProduce exactly 5 multiple-choice questions.`,
+            prompt: topic
+              ? `Document title: ${doc.title}\nTopic title: ${topic.title}\n\nTOPIC-FOCUSED MODE:\nWrite questions ONLY about the selected topic excerpt. Do not use other document sections or outside context.\n\nTOPIC EXCERPT (the only allowed source):\n"""\n${questionSource.slice(0, MAX_INPUT_CHARS)}\n"""\n\nProduce exactly 5 multiple-choice questions.`
+              : `Document title: ${doc.title}\n\nMATERIAL (the only allowed source):\n"""\n${questionSource.slice(0, MAX_INPUT_CHARS)}\n"""\n\nProduce exactly 5 multiple-choice questions.`,
             outputFormat: MARKDOWN_QUESTION_FORMAT,
             languageInstruction: localeContext.languageInstruction,
           }),
@@ -312,12 +386,18 @@ export const generateDocumentQuestions = createServerFn({ method: "POST" })
               p_model: result.model,
               p_questions: questions as unknown as Json,
               p_source_question_set_id: null,
+              p_topic_id: topicId,
             },
           );
           if (saveError || !setId) {
             throw new Error(saveError?.message ?? "The questions were generated but couldn't be saved.");
           }
-          const persisted = await loadCurrentStandardSet(supabase, doc.id, localeContext.locale);
+          const persisted = await loadCurrentStandardSet(
+            supabase,
+            doc.id,
+            localeContext.locale,
+            topicId,
+          );
           if (!persisted) throw new Error("The questions were generated but couldn't be loaded.");
           return persisted;
         },
@@ -332,6 +412,7 @@ export const generateDocumentQuestions = createServerFn({ method: "POST" })
           doc.id,
           localeContext.locale,
           existing?.id ?? null,
+          topicId,
         );
         if (saved) return { reused: true as const, ...saved };
         throw new Error("Question generation is already in progress. Please try again shortly.");
@@ -469,26 +550,29 @@ export const saveQuestionSessionDraft = createServerFn({ method: "POST" })
 /** Loads the latest unfinished question session for one material (owner only). */
 export const getActiveQuestionSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
+  .inputValidator((data: unknown) =>
+    z.object({ documentId: z.string().uuid(), topicId: z.string().uuid().optional() }).parse(data),
+  )
   .handler(async ({ data, context }) => {
     const { supabase } = context;
-    const { data: row } = await supabase
+    const topicId = data.topicId ?? null;
+    const query = supabase
       .from("question_sessions")
-      .select("id, question_set_id, total_questions, correct_answers, accuracy, answers, started_at")
+      .select(
+        "id, question_set_id, total_questions, correct_answers, accuracy, answers, started_at, question_sets!inner(id, locale, questions, topic_scope_id)",
+      )
       .eq("document_id", data.documentId)
       .is("completed_at", null)
       .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    const { data: row } = await (topicId
+      ? query.eq("question_sets.topic_scope_id", topicId)
+      : query.is("question_sets.topic_scope_id", null)
+    ).maybeSingle();
 
     if (!row) return null;
     if (!row.question_set_id) return null;
-
-    const { data: set } = await supabase
-      .from("question_sets")
-      .select("id, locale, questions")
-      .eq("id", row.question_set_id)
-      .maybeSingle();
+    const set = row.question_sets;
     if (!set) return null;
 
     return {
@@ -507,17 +591,25 @@ export const getActiveQuestionSession = createServerFn({ method: "POST" })
 /** Loads the most recent completed session for one material (owner only). */
 export const getLatestQuestionSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ documentId: z.string().uuid() }).parse(data))
+  .inputValidator((data: unknown) =>
+    z.object({ documentId: z.string().uuid(), topicId: z.string().uuid().optional() }).parse(data),
+  )
   .handler(async ({ data, context }) => {
     const { supabase } = context;
-    const { data: row } = await supabase
+    const topicId = data.topicId ?? null;
+    const query = supabase
       .from("question_sessions")
-      .select("id, question_set_id, total_questions, correct_answers, accuracy, answers, completed_at")
+      .select(
+        "id, question_set_id, total_questions, correct_answers, accuracy, answers, completed_at, question_sets!inner(topic_scope_id)",
+      )
       .eq("document_id", data.documentId)
       .not("completed_at", "is", null)
       .order("completed_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    const { data: row } = await (topicId
+      ? query.eq("question_sets.topic_scope_id", topicId)
+      : query.is("question_sets.topic_scope_id", null)
+    ).maybeSingle();
 
     if (!row) return null;
     return {
@@ -629,21 +721,13 @@ export const generatePracticeQuestions = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-
-    const { data: doc } = await supabase
-      .from("documents")
-      .select("id, title, user_id, extracted_text")
-      .eq("id", data.documentId)
-      .maybeSingle();
-    if (!doc || doc.user_id !== userId) throw new Error("Document not found.");
-    if (!doc.extracted_text || doc.extracted_text.trim().length < 200) {
-      throw new Error("This document has no readable extracted text yet.");
-    }
-    const extractedText = doc.extracted_text;
+    const doc = await loadOwnedQuestionDocument(supabase, userId, data.documentId);
 
     const { data: previousSet } = await supabase
       .from("question_sets")
-      .select("id, questions, document_id, user_id, locale, kind, source_question_set_id")
+      .select(
+        "id, questions, document_id, user_id, locale, kind, source_question_set_id, topic_id, topic_scope_id",
+      )
       .eq("id", data.questionSetId)
       .maybeSingle();
     if (!previousSet || previousSet.user_id !== userId || previousSet.document_id !== doc.id) {
@@ -654,7 +738,6 @@ export const generatePracticeQuestions = createServerFn({ method: "POST" })
         "The language of this legacy question set was not recorded. Generate a current-language question set before practising mistakes.",
       );
     }
-    const practiceLocale = previousSet.locale;
     const sourceQuestionSetId =
       previousSet.kind === "standard"
         ? previousSet.id
@@ -664,6 +747,37 @@ export const generatePracticeQuestions = createServerFn({ method: "POST" })
     if (!sourceQuestionSetId) {
       throw new Error("The original question set for this practice session could not be found.");
     }
+    const { data: sourceSet } = await supabase
+      .from("question_sets")
+      .select("id, document_id, user_id, locale, kind, topic_id, topic_scope_id")
+      .eq("id", sourceQuestionSetId)
+      .maybeSingle();
+    if (
+      !sourceSet ||
+      sourceSet.kind !== "standard" ||
+      sourceSet.user_id !== userId ||
+      sourceSet.document_id !== doc.id ||
+      sourceSet.locale !== previousSet.locale
+    ) {
+      throw new Error("The original question set for this practice session could not be found.");
+    }
+    const practiceLocale = sourceSet.locale;
+    if (!isLocale(practiceLocale)) {
+      throw new Error(
+        "The language of this legacy question set was not recorded. Generate a current-language question set before practising mistakes.",
+      );
+    }
+
+    const topicId = sourceSet.topic_scope_id;
+    if (topicId && sourceSet.topic_id !== topicId) throw new Error("TOPIC_NOT_FOUND");
+    if (!topicId && sourceSet.topic_id) throw new Error("QUESTION_SET_TOPIC_MISMATCH");
+    const topic = topicId
+      ? await loadTopicQuestionContext(supabase, userId, doc, topicId)
+      : null;
+    if (!topic && (!doc.extracted_text || doc.extracted_text.trim().length < MIN_QUESTION_SOURCE_CHARS)) {
+      throw new Error("This document has no readable extracted text yet.");
+    }
+    const questionSource = topic?.sourceText ?? doc.extracted_text!;
 
     const previousQuestions = previousSet.questions as unknown as StudyQuestion[];
     const missed = data.wrongIndexes
@@ -683,11 +797,14 @@ export const generatePracticeQuestions = createServerFn({ method: "POST" })
     const bannedBlock = previousQuestions.map((q) => `- ${q.question}`).join("\n");
     try {
       const saved = await runReservedAiGeneration({
-        reserve: () => reserveAiGeneration(supabase, "practice_questions", doc.id, practiceLocale),
+        reserve: () =>
+          reserveAiGeneration(supabase, "practice_questions", doc.id, practiceLocale, topicId),
         generate: () =>
           generateAiText({
             system: PRACTICE_SYSTEM_PROMPT,
-            prompt: `Document title: ${doc.title}\n\nMATERIAL (the only allowed source):\n"""\n${extractedText.slice(0, MAX_INPUT_CHARS)}\n"""\n\nMISSED QUESTIONS (content to reinforce, not to copy):\n${missedBlock}\n\nQUESTIONS ALREADY ASKED (must not be repeated or paraphrased):\n${bannedBlock}\n\nProduce exactly ${count} NEW multiple-choice question${count === 1 ? "" : "s"} covering the concepts behind the missed questions, grounded strictly in the material.`,
+            prompt: topic
+              ? `Document title: ${doc.title}\nTopic title: ${topic.title}\n\nTOPIC-FOCUSED MODE:\nWrite practice questions ONLY from the selected topic excerpt. Do not widen the scope to the rest of the document.\n\nTOPIC EXCERPT (the only allowed source):\n"""\n${questionSource.slice(0, MAX_INPUT_CHARS)}\n"""\n\nMISSED QUESTIONS (content to reinforce, not to copy):\n${missedBlock}\n\nQUESTIONS ALREADY ASKED (must not be repeated or paraphrased):\n${bannedBlock}\n\nProduce exactly ${count} NEW multiple-choice question${count === 1 ? "" : "s"} covering the concepts behind the missed questions, grounded strictly in the topic excerpt.`
+              : `Document title: ${doc.title}\n\nMATERIAL (the only allowed source):\n"""\n${questionSource.slice(0, MAX_INPUT_CHARS)}\n"""\n\nMISSED QUESTIONS (content to reinforce, not to copy):\n${missedBlock}\n\nQUESTIONS ALREADY ASKED (must not be repeated or paraphrased):\n${bannedBlock}\n\nProduce exactly ${count} NEW multiple-choice question${count === 1 ? "" : "s"} covering the concepts behind the missed questions, grounded strictly in the material.`,
             outputFormat: MARKDOWN_QUESTION_FORMAT,
             languageInstruction: languageInstruction(practiceLocale),
           }),
@@ -709,6 +826,7 @@ export const generatePracticeQuestions = createServerFn({ method: "POST" })
               p_model: result.model,
               p_questions: questions as unknown as Json,
               p_source_question_set_id: sourceQuestionSetId,
+              p_topic_id: topicId,
             },
           );
           if (saveError || !setId) {

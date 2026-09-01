@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { AppCard, AppLabel, ErrorState, Skeleton } from "@/components/app/ui";
 import { DocumentSummaryPanel } from "@/components/app/DocumentSummary";
+import { DocumentQuestionsPanel } from "@/components/app/DocumentQuestions";
 import {
   getDocumentTopic,
   STALE_TOPIC_SOURCE,
@@ -92,12 +93,7 @@ function DocumentTopicDetailPage() {
             documentTitle={state.topic.title}
             topicId={state.topic.id}
           />
-          <AppCard className="border-dashed">
-            <AppLabel>{t("topics.detailComing")}</AppLabel>
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-              {t("topics.detailComingBody")}
-            </p>
-          </AppCard>
+          <DocumentQuestionsPanel documentId={state.document.id} topicId={state.topic.id} />
         </>
       ) : null}
     </div>

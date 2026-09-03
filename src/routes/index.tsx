@@ -17,7 +17,6 @@ import { StudySession } from "@/components/StudySession";
 import { Analytics } from "@/components/Analytics";
 import { DailyBriefing } from "@/components/DailyBriefing";
 import { HowItWorks } from "@/components/HowItWorks";
-import { Testimonials } from "@/components/Testimonials";
 import { Pricing } from "@/components/Pricing";
 import { FAQ } from "@/components/FAQ";
 import { FinalCTA } from "@/components/FinalCTA";
@@ -53,11 +52,6 @@ export const Route = createFileRoute("/")({
           applicationCategory: "EducationalApplication",
           operatingSystem: "Web",
           description: DESCRIPTION,
-          offers: [
-            { "@type": "Offer", price: "0", priceCurrency: "USD", name: "Free" },
-            { "@type": "Offer", price: "12", priceCurrency: "USD", name: "Pro" },
-            { "@type": "Offer", price: "24", priceCurrency: "USD", name: "Academic" },
-          ],
         }),
       },
     ],
@@ -92,7 +86,6 @@ function Index() {
         <Analytics />
         <DailyBriefing />
         <HowItWorks />
-        <Testimonials />
         <Pricing onStart={() => setWorkspace(true)} />
         <FAQ />
         <FinalCTA onStart={() => setWorkspace(true)} />

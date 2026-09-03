@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { AppCard, AppLabel, GhostButton, PrimaryButton } from "@/components/app/ui";
-import { getUserLocale, SUPPORTED_LOCALES, type Locale, useI18n } from "@/lib/i18n";
+import { getUserLocale, SUPPORTED_LOCALES, translate, type Locale, useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
 import {
   authErrorMessage,
@@ -86,7 +86,7 @@ function SettingsPage() {
     setBusy("language");
     try {
       await updateLanguagePreference(selectedLocale);
-      setNotice(t("settings.languageSaved"));
+      setNotice(translate(selectedLocale, "settings.languageSaved"));
     } catch (err) {
       setLocale(locale);
       setError(authErrorMessage(err, t, t("settings.languageError")));
@@ -210,7 +210,7 @@ function SettingsPage() {
             >
               {SUPPORTED_LOCALES.map((option) => (
                 <option key={option} value={option}>
-                  {option === "pt-BR" ? "Portugues (Brasil)" : "English"}
+                  {option === "pt-BR" ? t("settings.languagePortuguese") : t("settings.languageEnglish")}
                 </option>
               ))}
             </select>

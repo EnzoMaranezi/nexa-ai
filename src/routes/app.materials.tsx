@@ -19,6 +19,8 @@ import {
   type StoredDocument,
 } from "@/services/documentService";
 import { useI18n } from "@/lib/i18n";
+import { formatAbsoluteDate } from "@/lib/dates";
+import { userErrorKey } from "@/lib/user-errors";
 
 export const Route = createFileRoute("/app/materials")({
   head: () => ({
@@ -33,16 +35,8 @@ export const Route = createFileRoute("/app/materials")({
   component: Materials,
 });
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 function Materials() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [documents, setDocuments] = useState<StoredDocument[] | null>(null);
   const [target, setTarget] = useState<StoredDocument | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -57,7 +51,8 @@ function Materials() {
       .then(setDocuments)
       .catch((e: unknown) => {
         setDocuments([]);
-        setError(e instanceof Error ? e.message : t("materials.loadError"));
+        console.error("Loading materials failed", e);
+        setError(t(userErrorKey(e, "errors.load")));
       });
   }, []);
 
@@ -73,7 +68,8 @@ function Materials() {
       setNotice(t("materials.deleted", { title: doc.title }));
       setTarget(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("materials.deleteError"));
+      console.error("Deleting material failed", e);
+      setError(t(userErrorKey(e, "errors.delete")));
       setTarget(null);
     } finally {
       setDeletingId(null);
@@ -92,7 +88,8 @@ function Materials() {
       setRenameDraft("");
       setNotice(t("materials.renamed", { title: renamed.title }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("materials.renameError"));
+      console.error("Renaming material failed", e);
+      setError(t(userErrorKey(e, "errors.save")));
     } finally {
       setRenamingId(null);
     }
@@ -152,7 +149,7 @@ function Materials() {
                             value={renameDraft}
                             onChange={(e) => setRenameDraft(e.target.value)}
                             className="min-w-0 flex-1 rounded-xl border border-border bg-surface-2/60 px-3 py-2 text-sm outline-none focus:border-lime/40"
-                            aria-label={`Rename ${doc.title}`}
+                            aria-label={t("materials.renameAria", { title: doc.title })}
                             autoFocus
                           />
                           <button
@@ -161,7 +158,7 @@ function Materials() {
                               void saveRename(doc);
                             }}
                             disabled={renamingId === doc.id}
-                            aria-label="Save material title"
+                            aria-label={t("materials.saveRenameAria")}
                             className="rounded-full border border-border p-2 text-muted-foreground transition-colors hover:border-lime/40 hover:text-lime disabled:opacity-50"
                           >
                             <Check className="size-4" aria-hidden />
@@ -173,7 +170,7 @@ function Materials() {
                               setRenameDraft("");
                             }}
                             disabled={renamingId === doc.id}
-                            aria-label="Cancel rename"
+                            aria-label={t("materials.cancelRenameAria")}
                             className="rounded-full border border-border p-2 text-muted-foreground transition-colors hover:border-lime/40 hover:text-foreground disabled:opacity-50"
                           >
                             <X className="size-4" aria-hidden />
@@ -192,7 +189,7 @@ function Materials() {
                               setError(null);
                               setNotice(null);
                             }}
-                            aria-label={`Rename ${doc.title}`}
+                            aria-label={t("materials.renameAria", { title: doc.title })}
                             className="mt-1 shrink-0 rounded-full border border-border p-1.5 text-muted-foreground transition-colors hover:border-lime/40 hover:text-lime"
                           >
                             <Pencil className="size-3.5" aria-hidden />
@@ -200,7 +197,7 @@ function Materials() {
                         </div>
                       )}
                       <p className="mt-3 font-mono text-[11px] text-muted-foreground">
-                        {formatDate(doc.createdAt)} · {doc.status}
+                        {formatAbsoluteDate(doc.createdAt, locale)} · {doc.status}
                         {doc.hasSummary ? ` · ${t("materials.summaryReady")}` : ""}
                       </p>
                       <div className="mt-4 flex flex-wrap items-center gap-4">
@@ -236,7 +233,7 @@ function Materials() {
                       type="button"
                       onClick={() => setTarget(doc)}
                       disabled={deletingId === doc.id}
-                      aria-label={`Delete ${doc.title}`}
+                      aria-label={t("materials.deleteAria", { title: doc.title })}
                       className="shrink-0 rounded-full border border-border p-2 text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive disabled:opacity-50"
                     >
                       <Trash2 className="size-4" aria-hidden />

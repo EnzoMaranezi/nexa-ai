@@ -5,6 +5,7 @@ import type { SessionAnswer, StudyQuestion } from "@/lib/questions.schema";
 import { runBoundedServerOperation } from "@/lib/bounded-server-operation";
 import {
   buildProgressOverview,
+  mapSession,
   type ProgressOverview,
   type ProgressSessionRow,
   type StudySessionListItem,
@@ -20,26 +21,15 @@ export const listStudySessions = createServerFn({ method: "POST" })
     const { data, error } = await supabase
       .from("question_sessions")
       .select(
-        "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title)",
+        "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title), question_sets(kind, topic_id, topic_scope_id, document_topics(id, title))",
       )
+      .eq("user_id", context.userId)
       .not("completed_at", "is", null)
       .order("completed_at", { ascending: false });
 
     if (error) throw new Error(error.message);
 
-    return (data ?? []).map((row) => {
-      const doc = row.documents as { title: string } | null;
-      return {
-        id: row.id,
-        documentId: row.document_id,
-        documentTitle: doc?.title ?? null,
-        totalQuestions: row.total_questions,
-        correctAnswers: row.correct_answers,
-        incorrectAnswers: Math.max(row.total_questions - row.correct_answers, 0),
-        accuracy: Number(row.accuracy),
-        completedAt: row.completed_at,
-      };
-    });
+    return (data ?? []).map(mapSession);
   });
 
 export const getProgressOverview = createServerFn({ method: "POST" })
@@ -52,16 +42,18 @@ export const getProgressOverview = createServerFn({ method: "POST" })
         supabase
           .from("question_sessions")
           .select(
-            "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title)",
+            "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title), question_sets(kind, topic_id, topic_scope_id, document_topics(id, title))",
           )
+          .eq("user_id", context.userId)
           .not("completed_at", "is", null)
           .order("completed_at", { ascending: false })
           .abortSignal(signal),
         supabase
           .from("question_sessions")
           .select(
-            "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title)",
+            "id, document_id, total_questions, correct_answers, accuracy, completed_at, documents(title), question_sets(kind, topic_id, topic_scope_id, document_topics(id, title))",
           )
+          .eq("user_id", context.userId)
           .is("completed_at", null)
           .order("updated_at", { ascending: false })
           .limit(1)
@@ -99,8 +91,9 @@ export const getStudySession = createServerFn({ method: "POST" })
     const { data: row, error } = await supabase
       .from("question_sessions")
       .select(
-        "id, document_id, question_set_id, total_questions, correct_answers, accuracy, completed_at, answers, documents(title)",
+        "id, document_id, question_set_id, total_questions, correct_answers, accuracy, completed_at, answers, documents(title), question_sets(kind, topic_id, topic_scope_id, document_topics(id, title))",
       )
+      .eq("user_id", context.userId)
       .eq("id", data.sessionId)
       .maybeSingle();
 
@@ -115,6 +108,8 @@ export const getStudySession = createServerFn({ method: "POST" })
         .from("question_sets")
         .select("questions")
         .eq("id", row.question_set_id)
+        .eq("user_id", context.userId)
+        .eq("document_id", row.document_id)
         .maybeSingle();
       if (set) questions = set.questions as unknown as StudyQuestion[];
     }
@@ -131,14 +126,7 @@ export const getStudySession = createServerFn({ method: "POST" })
     }
 
     return {
-      id: row.id,
-      documentId: row.document_id,
-      documentTitle: doc?.title ?? null,
-      totalQuestions: row.total_questions,
-      correctAnswers: row.correct_answers,
-      incorrectAnswers: Math.max(row.total_questions - row.correct_answers, 0),
-      accuracy: Number(row.accuracy),
-      completedAt: row.completed_at,
+      ...mapSession(row),
       answers: (row.answers as unknown as SessionAnswer[]) ?? [],
       questions,
       documentExists: Boolean(doc),

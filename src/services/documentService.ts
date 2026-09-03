@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/integrations/supabase/types";
 import { extractDocumentText } from "@/lib/documents.functions";
+import { hasDocumentSummary } from "./document-summary-readiness";
+import { nextPastedNoteTitle } from "./pasted-note-title";
 
 export type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
 
@@ -77,7 +79,7 @@ export async function uploadDocument(file: File): Promise<UploadedDocument> {
   return { id: row.id, title: row.title, filePath: row.file_url, status: row.status };
 }
 
-export async function createTextDocument(text: string): Promise<UploadedDocument> {
+export async function createTextDocument(text: string, title: string): Promise<UploadedDocument> {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   const user = userData?.user;
 
@@ -88,11 +90,25 @@ export async function createTextDocument(text: string): Promise<UploadedDocument
   const trimmed = text.trim();
   if (!trimmed) throw new UploadError("Paste your notes before analyzing material.");
 
+  const { data: existingDocuments, error: existingDocumentsError } = await supabase
+    .from("documents")
+    .select("title")
+    .eq("user_id", user.id);
+
+  if (existingDocumentsError) {
+    throw new UploadError(`Couldn't prepare your notes: ${existingDocumentsError.message}`);
+  }
+
+  const uniqueTitle = nextPastedNoteTitle(
+    title,
+    (existingDocuments ?? []).map((document) => document.title),
+  );
+
   const { data: row, error } = await supabase
     .from("documents")
     .insert({
       user_id: user.id,
-      title: "Pasted notes",
+      title: uniqueTitle,
       file_url: null,
       status: "processed",
       extracted_text: trimmed,
@@ -142,7 +158,7 @@ export interface StoredDocument {
 export async function listDocuments(): Promise<StoredDocument[]> {
   const { data, error } = await supabase
     .from("documents")
-    .select("id, title, file_url, status, created_at, summaries(id)")
+    .select("id, title, file_url, status, created_at, summaries(id, topic_id)")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -153,7 +169,7 @@ export async function listDocuments(): Promise<StoredDocument[]> {
     filePath: row.file_url,
     status: row.status,
     createdAt: row.created_at,
-    hasSummary: Array.isArray(row.summaries) && row.summaries.length > 0,
+    hasSummary: hasDocumentSummary(row.summaries),
   }));
 }
 
@@ -165,7 +181,7 @@ export async function renameDocument(documentId: string, title: string): Promise
     .from("documents")
     .update({ title: trimmed })
     .eq("id", documentId)
-    .select("id, title, file_url, status, created_at, summaries(id)")
+    .select("id, title, file_url, status, created_at, summaries(id, topic_id)")
     .single();
 
   if (error || !row) {
@@ -178,7 +194,7 @@ export async function renameDocument(documentId: string, title: string): Promise
     filePath: row.file_url,
     status: row.status,
     createdAt: row.created_at,
-    hasSummary: Array.isArray(row.summaries) && row.summaries.length > 0,
+    hasSummary: hasDocumentSummary(row.summaries),
   };
 }
 

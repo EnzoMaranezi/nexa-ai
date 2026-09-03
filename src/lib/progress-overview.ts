@@ -1,4 +1,11 @@
-export interface StudySessionListItem {
+export interface SessionScope {
+  kind: string;
+  topicId: string | null;
+  topicScopeId: string | null;
+  topicTitle: string | null;
+}
+
+export interface StudySessionListItem extends SessionScope {
   id: string;
   documentId: string;
   documentTitle: string | null;
@@ -36,9 +43,22 @@ export interface ProgressSessionRow {
   accuracy: number;
   completed_at: string | null;
   documents: { title: string } | null;
+  question_sets?: {
+    kind: string;
+    topic_id: string | null;
+    topic_scope_id: string | null;
+    document_topics: { id: string; title: string } | null;
+  } | null;
 }
 
-function mapSession(row: ProgressSessionRow): StudySessionListItem {
+export function mapSession(row: ProgressSessionRow): StudySessionListItem {
+  const set = row.question_sets;
+  const topicScopeId = set?.topic_scope_id ?? set?.topic_id ?? null;
+  const topic = set?.document_topics;
+  // Only current, visible topic metadata can provide a navigation target.
+  const topicId =
+    topic && topic.id === set?.topic_id && topic.id === topicScopeId ? topic.id : null;
+
   return {
     id: row.id,
     documentId: row.document_id,
@@ -48,6 +68,10 @@ function mapSession(row: ProgressSessionRow): StudySessionListItem {
     incorrectAnswers: Math.max(row.total_questions - row.correct_answers, 0),
     accuracy: Number(row.accuracy),
     completedAt: row.completed_at,
+    kind: set?.kind ?? "legacy",
+    topicId,
+    topicScopeId,
+    topicTitle: topicId ? topic!.title : null,
   };
 }
 

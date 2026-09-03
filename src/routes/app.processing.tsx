@@ -8,6 +8,7 @@ import { storageService, type PendingInput } from "@/services/storageService";
 import { loadProcessedDocumentInput } from "@/services/studyAnalysisService";
 import { getGsap, prefersReducedMotion } from "@/animations/scroll";
 import { useI18n } from "@/lib/i18n";
+import { userErrorKey } from "@/lib/user-errors";
 
 export const Route = createFileRoute("/app/processing")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -26,13 +27,10 @@ export const Route = createFileRoute("/app/processing")({
 });
 
 const STAGES = [
-  "Reading material",
-  "Extracting concepts",
-  "Mapping relationships",
-  "Identifying difficult areas",
-  "Generating questions",
-  "Building study session",
-];
+  "processing.stage.preparing",
+  "processing.stage.analyzing",
+  "processing.stage.finalizing",
+] as const;
 
 function Processing() {
   const { documentId } = Route.useSearch();
@@ -65,13 +63,12 @@ function Processing() {
 
   useEffect(() => {
     let cancelled = false;
-    const timers: ReturnType<typeof setTimeout>[] = [];
 
     (async () => {
       try {
         const pendingInput = storageService.getPendingInput();
         const inputFromDocumentId: PendingInput | null = documentId
-          ? { kind: "notes", name: "Pasted notes", documentId }
+          ? { kind: "notes", name: t("material.pastedNotes"), documentId }
           : null;
         const inputContext =
           pendingInput?.documentId === documentId || !documentId ? pendingInput : inputFromDocumentId;
@@ -82,12 +79,11 @@ function Processing() {
           ? await loadProcessedDocumentInput(inputContext.documentId)
           : inputContext;
 
-        STAGES.forEach((_, i) => {
-          timers.push(setTimeout(() => !cancelled && setStage(i + 1), 700 * (i + 1)));
-        });
-
+        setStage(1);
         const analysis = await analyzeMaterial(input);
         if (cancelled) return;
+
+        setStage(2);
         storageService.setAnalysis(analysis);
         storageService.addMaterial({
           id: analysis.id,
@@ -95,29 +91,26 @@ function Processing() {
           subject: analysis.subject,
           chapter: analysis.chapter,
           concepts: analysis.concepts.length * 4 + 3,
-          lastStudied: "Just now",
+          lastStudied: t("dates.justNow"),
           progress: 12,
           source: input.kind === "notes" ? "notes" : "upload",
         });
         storageService.clearProgress();
 
-        timers.push(
-          setTimeout(() => {
-            if (!cancelled) navigate({ to: "/app/plan", search: { documentId: input.documentId } });
-          }, 700 * STAGES.length + 900),
-        );
+        if (!cancelled) navigate({ to: "/app/plan", search: { documentId: input.documentId } });
       } catch (error) {
         if (!cancelled) {
-          setError(error instanceof Error && error.message ? error.message : "Your material wasn't processed.");
+          console.error("Processing material failed", error);
+          const key = userErrorKey(error);
+          setError(t(key === "errors.load" ? "processing.error" : key));
         }
       }
     })();
 
     return () => {
       cancelled = true;
-      timers.forEach(clearTimeout);
     };
-  }, [documentId, navigate]);
+  }, [documentId, navigate, t]);
 
   if (error) {
     return (
@@ -126,8 +119,6 @@ function Processing() {
       </div>
     );
   }
-
-  const done = stage >= STAGES.length;
 
   return (
     <div className="relative mx-auto flex min-h-[70vh] max-w-[880px] flex-col justify-center">
@@ -177,14 +168,7 @@ function Processing() {
         </p>
 
         <ul className="mt-12 space-y-4" aria-live="polite">
-          {[
-            t("processing.stage.reading"),
-            t("processing.stage.extracting"),
-            t("processing.stage.mapping"),
-            t("processing.stage.weak"),
-            t("processing.stage.questions"),
-            t("processing.stage.building"),
-          ].map((s, i) => {
+          {STAGES.map((stageKey) => t(stageKey)).map((s, i) => {
             const state = i < stage ? "done" : i === stage ? "active" : "todo";
             return (
               <motion.li
@@ -206,16 +190,6 @@ function Processing() {
             );
           })}
         </ul>
-
-        {done && (
-          <motion.p
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-12 text-lg text-lime"
-          >
-            {t("processing.ready")}
-          </motion.p>
-        )}
       </div>
     </div>
   );

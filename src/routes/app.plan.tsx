@@ -100,6 +100,7 @@ function Plan() {
 
       <AppCard>
         <AppLabel>{t("plan.knowledgeMap")}</AppLabel>
+        <p className="mt-3 text-sm text-muted-foreground">{t("plan.knowledgeMapDescription")}</p>
         <div className="mt-6 overflow-x-auto">
           <div className="min-w-[560px]">
             <KnowledgeMap concepts={analysis.concepts} />

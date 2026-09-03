@@ -15,6 +15,7 @@ import type { SessionAnswer, StudyQuestion } from "@/lib/questions.schema";
 import { QuestionSessionResult } from "@/components/app/QuestionSessionResult";
 import { useI18n } from "@/lib/i18n";
 import { aiErrorMessage } from "@/lib/ai-errors";
+import { userErrorKey } from "@/lib/user-errors";
 import { cn } from "@/lib/utils";
 import { GeneratedContentLanguageState } from "@/components/app/GeneratedContentLanguageState";
 import type { PersistedContentLocale } from "@/lib/i18n";
@@ -135,7 +136,8 @@ export function DocumentQuestionsPanel({ documentId, topicId }: Props) {
         }
       })
       .catch((cause: unknown) => {
-        if (!cancelled) setError(questionErrorMessage(cause, t, Boolean(topicId), false));
+        console.error("Loading questions failed", cause);
+        if (!cancelled) setError(questionErrorMessage(cause, t, Boolean(topicId), false, true));
       })
       .finally(() => {
         if (!cancelled) setLoadingExisting(false);
@@ -163,6 +165,7 @@ export function DocumentQuestionsPanel({ documentId, topicId }: Props) {
       setSelected(null);
       setIndex(0);
     } catch (err) {
+      console.error("Question generation failed", err);
       setError(questionErrorMessage(err, t, Boolean(topicId), false));
     } finally {
       setGenerating(false);
@@ -193,6 +196,7 @@ export function DocumentQuestionsPanel({ documentId, topicId }: Props) {
       setSelected(null);
       setIndex(0);
     } catch (err) {
+      console.error("Practice generation failed", err);
       setError(questionErrorMessage(err, t, Boolean(topicId), true));
     } finally {
       setPractising(false);
@@ -223,13 +227,10 @@ export function DocumentQuestionsPanel({ documentId, topicId }: Props) {
       },
     })
       .then((saved) => setActiveSessionId(saved.id))
-      .catch((err: unknown) =>
-        setSaveError(
-          err instanceof Error && err.message
-            ? err.message
-            : t("questions.errorSave"),
-        ),
-      )
+      .catch((err: unknown) => {
+        console.error("Saving question session failed", err);
+        setSaveError(t(userErrorKey(err, "errors.save")));
+      })
       .finally(() => setSaving(false));
   }, [activeSessionId, completed, questions, questionSetId, sessionAnswers, documentId]);
 
@@ -485,6 +486,7 @@ function questionErrorMessage(
   t: (key: string) => string,
   topicScoped: boolean,
   practice: boolean,
+  loading = false,
 ) {
   const message = error instanceof Error ? error.message : "";
   if (topicScoped) {
@@ -499,6 +501,6 @@ function questionErrorMessage(
   return aiErrorMessage(
     error,
     t,
-    t(practice ? "questions.errorPractice" : "questions.errorGenerate"),
+    t(loading ? "errors.load" : practice ? "questions.errorPractice" : "questions.errorGenerate"),
   );
 }

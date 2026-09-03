@@ -49,6 +49,7 @@ export function DocumentSummaryPanel({ documentId, documentTitle, topicId }: Pro
         }
       })
       .catch((cause: unknown) => {
+        console.error("Loading summary failed", cause);
         if (!cancelled) setLookupError(summaryErrorMessage(cause, t, true, Boolean(topicId)));
       })
       .finally(() => {
@@ -67,6 +68,7 @@ export function DocumentSummaryPanel({ documentId, documentTitle, topicId }: Pro
       setSummary(res.summary);
       setCurrentAvailable(true);
     } catch (err) {
+      console.error("Summary generation failed", err);
       setError(summaryErrorMessage(err, t, false, Boolean(topicId)));
     } finally {
       setLoading(false);

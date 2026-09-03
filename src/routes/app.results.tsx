@@ -10,6 +10,7 @@ import {
   Skeleton,
 } from "@/components/app/ui";
 import { getProgressOverview } from "@/lib/progress.functions";
+import { SessionScopeLabel } from "@/components/app/SessionScopeLabel";
 import { relativeDay } from "@/lib/dates";
 import { useI18n } from "@/lib/i18n";
 
@@ -30,7 +31,7 @@ export const Route = createFileRoute("/app/results")({
 });
 
 function Progress() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const fetchOverview = useServerFn(getProgressOverview);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["progress-overview"],
@@ -124,9 +125,12 @@ function Progress() {
                   params={{ sessionId: s.id }}
                   className="flex items-center justify-between gap-4 text-sm hover:text-lime"
                 >
-                  <span className="min-w-0 truncate">{s.documentTitle ?? t("progress.materialDeleted")}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate">{s.documentTitle ?? t("progress.materialDeleted")}</span>
+                    <SessionScopeLabel session={s} />
+                  </span>
                   <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                    {s.accuracy}% · {relativeDay(s.completedAt)}
+                    {s.accuracy}% · {relativeDay(s.completedAt, locale)}
                   </span>
                 </Link>
               </li>

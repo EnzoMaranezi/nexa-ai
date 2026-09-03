@@ -1,12 +1,12 @@
 import { useState } from "react";
 import type { Concept } from "@/types/study";
+import { useI18n } from "@/lib/i18n";
 
 interface Node {
   id: string;
   label: string;
   x: number;
   y: number;
-  weak?: boolean;
 }
 
 const POSITIONS = [
@@ -18,9 +18,10 @@ const POSITIONS = [
   [480, 265],
 ] as const;
 
-/** Concept map for the current analysis. Lime marks active or weak nodes only. */
+/** Neutral visual overview of concepts extracted from the current material. */
 export function KnowledgeMap({ concepts }: { concepts?: Concept[] }) {
   const [active, setActive] = useState<string | null>(null);
+  const { t } = useI18n();
 
   const visibleConcepts = (concepts ?? []).slice(0, POSITIONS.length);
   const layout: Node[] = visibleConcepts.map((concept, index) => {
@@ -30,19 +31,13 @@ export function KnowledgeMap({ concepts }: { concepts?: Concept[] }) {
       label: concept.title,
       x,
       y,
-      weak: concept.mastery < 65 || concept.difficulty === "hard",
     };
   });
-
-  const byId = Object.fromEntries(layout.map((n) => [n.id, n]));
-  const edges: [string, string][] = visibleConcepts
-    .slice(1)
-    .map((concept) => [concept.parent && byId[concept.parent] ? concept.parent : visibleConcepts[0]!.id, concept.id]);
 
   if (layout.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-        No concept map is available for this material yet.
+        {t("plan.knowledgeMapEmpty")}
       </div>
     );
   }
@@ -52,26 +47,8 @@ export function KnowledgeMap({ concepts }: { concepts?: Concept[] }) {
       viewBox="0 0 700 320"
       className="h-auto w-full"
       role="img"
-      aria-label="Knowledge map of the concepts found in your material"
+      aria-label={t("knowledgeMap.aria")}
     >
-      {edges.map(([a, b]) => {
-        const na = byId[a]!;
-        const nb = byId[b]!;
-        const lit = active === a || active === b;
-        return (
-          <line
-            key={`${a}-${b}`}
-            x1={na.x}
-            y1={na.y + 14}
-            x2={nb.x}
-            y2={nb.y - 14}
-            stroke={lit ? "var(--lime)" : "var(--line)"}
-            strokeWidth={lit ? 1.4 : 1}
-            className="transition-all duration-300"
-          />
-        );
-      })}
-
       {layout.map((n) => {
         const lit = active === n.id;
         return (
@@ -89,8 +66,8 @@ export function KnowledgeMap({ concepts }: { concepts?: Concept[] }) {
           >
             <circle
               r={lit ? 7 : 5}
-              fill={lit || n.weak ? "var(--lime)" : "var(--surface-3)"}
-              stroke={n.weak ? "var(--lime)" : "var(--line)"}
+              fill={lit ? "var(--lime)" : "var(--surface-3)"}
+              stroke={lit ? "var(--lime)" : "var(--line)"}
               className="transition-all duration-300"
             />
             <text
@@ -98,7 +75,7 @@ export function KnowledgeMap({ concepts }: { concepts?: Concept[] }) {
               textAnchor="middle"
               className="font-mono"
               fontSize="11"
-              fill={lit || n.weak ? "var(--lime)" : "var(--muted-foreground)"}
+              fill={lit ? "var(--lime)" : "var(--muted-foreground)"}
             >
               {n.label}
             </text>

@@ -38,7 +38,7 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 
 export function CTAButton({
   children,
-  href = "#pricing",
+  href = "#beta",
   variant = "primary",
   className,
   onClick,

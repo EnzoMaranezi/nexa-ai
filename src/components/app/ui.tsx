@@ -51,6 +51,7 @@ export function ProgressBar({
   muted?: boolean;
   label?: string;
 }) {
+  const { t } = useI18n();
   return (
     <div
       className={cn("h-1 w-full overflow-hidden rounded-full bg-surface-3", className)}
@@ -58,7 +59,7 @@ export function ProgressBar({
       aria-valuenow={Math.round(value)}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-label={label ?? "progress"}
+      aria-label={label ?? t("common.progress")}
     >
       <motion.div
         className={cn("h-full rounded-full", muted ? "bg-muted-foreground/50" : "bg-lime")}

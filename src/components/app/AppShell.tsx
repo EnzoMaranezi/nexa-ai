@@ -10,7 +10,6 @@ import {
   Settings,
   Menu,
   X,
-  Search,
   User,
   Plus,
   LogOut,
@@ -33,7 +32,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n();
 
   return (
-    <nav className="flex flex-col gap-1" aria-label="Workspace">
+    <nav className="flex flex-col gap-1" aria-label={t("nav.workspaceAria")}>
       <p className="label-mono px-3 pb-3">{t("nav.workspace")}</p>
       {NAV.map((item) => {
         const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
@@ -94,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               type="button"
               className="rounded-lg border border-border p-2 lg:hidden"
-              aria-label={open ? "Close navigation" : "Open navigation"}
+              aria-label={open ? t("nav.closeNavigation") : t("nav.openNavigation")}
               aria-expanded={open}
               onClick={() => setOpen((v) => !v)}
             >
@@ -104,20 +103,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               {SITE.name}
             </Link>
             <span className="hidden font-mono text-[11px] text-muted-foreground md:inline">
-              / workspace
+              / {t("nav.workspace")}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="hidden items-center gap-2 rounded-full border border-border bg-surface/60 px-4 py-2 md:flex">
-              <Search className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-              <span className="sr-only">{t("nav.searchMaterials")}</span>
-              <input
-                type="search"
-                placeholder={t("nav.searchMaterials")}
-                className="w-40 bg-transparent text-sm outline-none placeholder:text-muted-foreground lg:w-56"
-              />
-            </label>
             <span className="hidden items-center gap-2 rounded-full border border-border bg-surface/60 py-2 pl-3 pr-4 sm:flex">
               <User className="h-3.5 w-3.5 text-lime" aria-hidden />
               <span className="max-w-[10rem] truncate font-mono text-[11px] text-muted-foreground">
@@ -160,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <button
                 type="button"
-                aria-label="Close navigation"
+                aria-label={t("nav.closeNavigation")}
                 className="absolute inset-0 bg-background/80 backdrop-blur-sm"
                 onClick={() => setOpen(false)}
               />
@@ -184,7 +174,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <nav
         className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-border bg-background/95 backdrop-blur-xl md:hidden"
-        aria-label="Primary"
+        aria-label={t("nav.primaryNavigation")}
       >
         {NAV.map((item) => {
           const Icon = item.icon;

@@ -273,7 +273,6 @@ export async function analyzeMaterial(input: PendingInput): Promise<StudyAnalysi
     throw new Error("Real AI mode is not configured yet.");
   }
 
-  await delay(600);
   const title = titleFromInput(input);
   const sourceText = input.text?.trim() ?? "";
   if (sourceText.length < 200) {

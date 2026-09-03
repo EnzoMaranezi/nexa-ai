@@ -6,13 +6,13 @@ import { AppCard, AppLabel, GhostButton, PrimaryButton } from "@/components/app/
 import { storageService } from "@/services/storageService";
 import {
   ExtractionError,
-  UploadError,
   createTextDocument,
   extractDocument,
   uploadDocument,
 } from "@/services/documentService";
 import { DocumentSummaryPanel } from "@/components/app/DocumentSummary";
 import { useI18n } from "@/lib/i18n";
+import { userErrorKey } from "@/lib/user-errors";
 
 export const Route = createFileRoute("/app/material")({
   head: () => ({
@@ -102,11 +102,8 @@ function AddMaterial() {
         filePath: uploaded.filePath ?? undefined,
       });
     } catch (err) {
-      setError(
-        err instanceof UploadError || err instanceof ExtractionError
-          ? err.message
-          : t("material.uploadError"),
-      );
+      console.error("Material upload or extraction failed", err);
+      setError(t(userErrorKey(err, err instanceof ExtractionError ? "errors.extract" : "errors.upload")));
     } finally {
       setUploading(false);
     }
@@ -118,7 +115,7 @@ function AddMaterial() {
     setError(null);
     setUploading(true);
     try {
-      const created = await createTextDocument(text);
+      const created = await createTextDocument(text, t("material.pastedNotes"));
       storageService.setPendingInput({
         kind: "notes",
         name: created.title,
@@ -130,11 +127,8 @@ function AddMaterial() {
       };
       navigate(navigationTarget);
     } catch (err) {
-      setError(
-        err instanceof UploadError
-          ? err.message
-          : t("material.saveNotesError"),
-      );
+      console.error("Saving notes failed", err);
+      setError(t(userErrorKey(err, "errors.save")));
     } finally {
       setUploading(false);
     }

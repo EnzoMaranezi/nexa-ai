@@ -1,12 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, FileText } from "lucide-react";
 import { AppCard, AppLabel, EmptyState, ErrorState, Skeleton } from "@/components/app/ui";
 import { QuestionSessionResult } from "@/components/app/QuestionSessionResult";
+import { SessionScopeLabel } from "@/components/app/SessionScopeLabel";
 import { getStudySession } from "@/lib/progress.functions";
 import { relativeDay } from "@/lib/dates";
 import { useI18n } from "@/lib/i18n";
+import { userErrorKey } from "@/lib/user-errors";
 
 export const Route = createFileRoute("/app/sessions/$sessionId")({
   head: () => ({
@@ -23,12 +26,15 @@ export const Route = createFileRoute("/app/sessions/$sessionId")({
 
 function SessionDetail() {
   const { sessionId } = Route.useParams();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const fetchSession = useServerFn(getStudySession);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["study-session", sessionId],
     queryFn: () => fetchSession({ data: { sessionId } }),
   });
+  useEffect(() => {
+    if (error) console.error("Loading session replay failed", error);
+  }, [error]);
 
   return (
     <div className="mx-auto max-w-[900px] space-y-8">
@@ -47,7 +53,7 @@ function SessionDetail() {
         </AppCard>
       ) : error ? (
         <ErrorState
-          body={error instanceof Error ? error.message : t("sessions.loadOneError")}
+          body={t(userErrorKey(error, "errors.load"))}
           onRetry={() => void refetch()}
         />
       ) : !data ? (
@@ -64,8 +70,9 @@ function SessionDetail() {
             <FileText className="h-5 w-5 text-muted-foreground" aria-hidden />
             {data.documentTitle ?? t("progress.materialDeleted")}
           </h1>
+          <SessionScopeLabel session={data} />
           <p className="mt-3 font-mono text-[11px] text-muted-foreground">
-            {relativeDay(data.completedAt)} · {data.totalQuestions} {t("overview.questions")} ·{" "}
+            {relativeDay(data.completedAt, locale)} · {data.totalQuestions} {t("overview.questions")} ·{" "}
             {data.correctAnswers} {t("results.correct").toLowerCase()} · {data.incorrectAnswers}{" "}
             {t("results.incorrect").toLowerCase()}
           </p>
@@ -81,13 +88,23 @@ function SessionDetail() {
                   {t("materials.viewSummary")} <span aria-hidden>→</span>
                 </Link>
               ) : null}
-              <Link
-                to="/app/questions/$documentId"
-                params={{ documentId: data.documentId }}
-                className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 font-mono text-xs text-muted-foreground transition-colors hover:border-lime/40 hover:text-foreground"
-              >
-                {t("results.newSession")} <span aria-hidden>→</span>
-              </Link>
+              {data.topicId ? (
+                <Link
+                  to="/app/materials/$documentId/topics/$topicId"
+                  params={{ documentId: data.documentId, topicId: data.topicId }}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 font-mono text-xs text-muted-foreground transition-colors hover:border-lime/40 hover:text-foreground"
+                >
+                  {t("sessions.openTopic")} <span aria-hidden>→</span>
+                </Link>
+              ) : !data.topicScopeId ? (
+                <Link
+                  to="/app/questions/$documentId"
+                  params={{ documentId: data.documentId }}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 font-mono text-xs text-muted-foreground transition-colors hover:border-lime/40 hover:text-foreground"
+                >
+                  {t("results.newSession")} <span aria-hidden>→</span>
+                </Link>
+              ) : null}
             </div>
           ) : (
             <p className="mt-6 font-mono text-[11px] text-muted-foreground">
@@ -98,6 +115,7 @@ function SessionDetail() {
           {data.questions.length > 0 ? (
             <QuestionSessionResult
               documentId={data.documentId}
+              {...(data.topicId ? { topicId: data.topicId } : {})}
               questions={data.questions}
               answers={data.answers}
               heading={t("results.recorded")}

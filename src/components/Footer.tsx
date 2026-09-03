@@ -2,15 +2,13 @@ import { SITE, NAV_LINKS } from "@/data/site";
 import { useI18n } from "@/lib/i18n";
 
 const SOCIAL = ["X", "Instagram", "LinkedIn", "Discord"];
-const LEGAL = ["Privacy", "Terms"];
 const NAV_LABEL_KEYS = [
   "landing.nav.product",
   "landing.nav.how",
   "landing.nav.intelligence",
-  "landing.nav.pricing",
+  "landing.nav.beta",
   "landing.nav.faq",
 ] as const;
-const LEGAL_KEYS = ["landing.privacy", "landing.terms"] as const;
 
 export function Footer() {
   const { t } = useI18n();
@@ -36,16 +34,6 @@ export function Footer() {
                     className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {t(NAV_LABEL_KEYS[index] ?? "landing.nav.product")}
-                  </a>
-                </li>
-              ))}
-              {LEGAL.map((l, index) => (
-                <li key={l}>
-                  <a
-                    href="#top"
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {t(LEGAL_KEYS[index] ?? "landing.privacy")}
                   </a>
                 </li>
               ))}

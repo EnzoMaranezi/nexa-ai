@@ -105,6 +105,7 @@ export function DocumentFlashcardsPanel({ documentId, topicId }: { documentId: s
       setMode("review"); setIndex(0); setRevealed(false); setComplete(false); setReviewedThisSession(false);
     }
     catch (cause) {
+      console.error("Flashcard generation failed", cause);
       const topicError = flashcardTopicError(cause, t, "");
       setError(topicError || aiErrorMessage(cause, t, t("flashcards.errorGenerate")));
     }

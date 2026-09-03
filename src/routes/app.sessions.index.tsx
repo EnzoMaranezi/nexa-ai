@@ -1,11 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { FileText } from "lucide-react";
 import { AppCard, AppLabel, EmptyState, ErrorState, Skeleton } from "@/components/app/ui";
 import { listStudySessions } from "@/lib/progress.functions";
+import { SessionScopeLabel } from "@/components/app/SessionScopeLabel";
 import { relativeDay } from "@/lib/dates";
 import { useI18n } from "@/lib/i18n";
+import { userErrorKey } from "@/lib/user-errors";
 
 export const Route = createFileRoute("/app/sessions/")({
   head: () => ({
@@ -24,12 +27,15 @@ export const Route = createFileRoute("/app/sessions/")({
 });
 
 function SessionsPage() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const fetchSessions = useServerFn(listStudySessions);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["study-sessions"],
     queryFn: () => fetchSessions(),
   });
+  useEffect(() => {
+    if (error) console.error("Loading study sessions failed", error);
+  }, [error]);
 
   return (
     <div className="mx-auto max-w-[1000px] space-y-8">
@@ -52,7 +58,7 @@ function SessionsPage() {
         </div>
       ) : error ? (
         <ErrorState
-          body={error instanceof Error ? error.message : t("sessions.loadError")}
+          body={t(userErrorKey(error, "errors.load"))}
           onRetry={() => void refetch()}
         />
       ) : !data || data.length === 0 ? (
@@ -77,10 +83,11 @@ function SessionsPage() {
                       <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                       {s.documentTitle ?? t("progress.materialDeleted")}
                     </p>
+                    <SessionScopeLabel session={s} />
                     <p className="mt-2 font-mono text-[11px] text-muted-foreground">
                       {s.totalQuestions} {t("overview.questions")} · {s.correctAnswers}{" "}
                       {t("results.correct").toLowerCase()} · {s.incorrectAnswers}{" "}
-                      {t("results.incorrect").toLowerCase()} · {relativeDay(s.completedAt)}
+                      {t("results.incorrect").toLowerCase()} · {relativeDay(s.completedAt, locale)}
                     </p>
                   </div>
                   <p className="font-mono text-2xl text-lime">{s.accuracy}%</p>

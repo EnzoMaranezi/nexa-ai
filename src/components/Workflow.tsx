@@ -62,7 +62,7 @@ export function Workflow() {
           <div className="rounded-2xl border border-border bg-background p-8">
             <p className="label-mono">{t("landing.upload")}</p>
             <div className="mt-6 rounded-xl border border-dashed border-border p-6">
-              <p className="font-mono text-sm text-foreground">{t("landing.workflowFileName")}</p>
+              <p className="break-all font-mono text-sm text-foreground">{t("landing.workflowFileName")}</p>
               <p className="mt-1 font-mono text-[11px] text-muted-foreground">{t("landing.workflowFileMeta")}</p>
               <div className="mt-5 h-px w-full bg-surface-3">
                 <div data-upload-bar className="h-px origin-left bg-lime" />

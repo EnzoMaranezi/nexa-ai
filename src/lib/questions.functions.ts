@@ -658,7 +658,10 @@ export const getDocumentReinforcementAreas = createServerFn({ method: "POST" })
     const questionsBySet = new Map(
       (sets ?? []).map((set) => [set.id, set.questions as unknown as StudyQuestion[]]),
     );
-    const areas = new Map<string, { title: string; misses: number; total: number; reason: string }>();
+    const areas = new Map<
+      string,
+      { title: string; misses: number; total: number; reasonCode: "incorrectAnswer" }
+    >();
 
     for (const session of completedSessions) {
       const questions = session.question_set_id ? questionsBySet.get(session.question_set_id) : undefined;
@@ -673,7 +676,7 @@ export const getDocumentReinforcementAreas = createServerFn({ method: "POST" })
           title,
           misses: 0,
           total: 0,
-          reason: "Prioritized because this question was answered incorrectly in a completed session.",
+          reasonCode: "incorrectAnswer",
         };
         current.total += 1;
         if (!answer.correct) current.misses += 1;

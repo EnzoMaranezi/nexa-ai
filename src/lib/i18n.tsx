@@ -440,6 +440,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "plan.areasCount": "{count} areas to reinforce",
     "plan.firstSessionEmpty": "Complete your first study session to identify areas to reinforce.",
     "plan.noIncorrect": "No incorrect answers have been recorded for this material yet.",
+    "plan.reinforcementReason.incorrectAnswer":
+      "Prioritized because this question was answered incorrectly in a completed session.",
     "plan.missedTimes": "Missed {count} time{plural}",
     "plan.focusWeak": "Focus on weak areas",
     "plan.startSession": "Start session",
@@ -1156,6 +1158,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "plan.firstSessionEmpty":
       "Complete sua primeira sessao de estudo para identificar areas para reforcar.",
     "plan.noIncorrect": "Nenhuma resposta incorreta foi registrada para este material ainda.",
+    "plan.reinforcementReason.incorrectAnswer":
+      "Priorizado porque esta pergunta foi respondida incorretamente em uma sessão concluída.",
     "plan.missedTimes": "Errou {count} vez{plural}",
     "plan.focusWeak": "Focar nas areas fracas",
     "plan.startSession": "Iniciar sessao",

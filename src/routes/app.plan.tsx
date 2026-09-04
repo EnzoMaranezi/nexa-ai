@@ -31,7 +31,7 @@ function Plan() {
   const [analysis, setAnalysis] = useState<StudyAnalysis | null | undefined>(undefined);
   const [reinforcement, setReinforcement] = useState<{
     completedSessions: number;
-    areas: { title: string; misses: number; total: number; reason: string }[];
+    areas: { title: string; misses: number; total: number; reasonCode: "incorrectAnswer" }[];
   } | null>(null);
 
   useEffect(() => {
@@ -161,7 +161,9 @@ function Plan() {
                           className="mt-3"
                           label={area.title}
                         />
-                        <p className="mt-2 text-xs text-muted-foreground">{area.reason}</p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {t(`plan.reinforcementReason.${area.reasonCode}`)}
+                        </p>
                       </div>
                     </div>
                   </li>

@@ -18,6 +18,7 @@ import { aiErrorMessage } from "@/lib/ai-errors";
 import { userErrorKey } from "@/lib/user-errors";
 import { cn } from "@/lib/utils";
 import { GeneratedContentLanguageState } from "@/components/app/GeneratedContentLanguageState";
+import { AiGenerationProgress } from "@/components/app/AiGenerationProgress";
 import type { PersistedContentLocale } from "@/lib/i18n";
 
 interface Props {
@@ -361,11 +362,8 @@ export function DocumentQuestionsPanel({ documentId, topicId }: Props) {
         </div>
       ) : null}
 
-      {generating && !questions ? (
-        <p className="mt-6 font-mono text-xs text-muted-foreground" aria-live="polite">
-          {t(topicId ? "topics.questionsReading" : "questions.reading")}
-        </p>
-      ) : null}
+      {generating ? <AiGenerationProgress type="questions" /> : null}
+      {practising ? <AiGenerationProgress type="practice" /> : null}
 
       {questions && current && !completed ? (
         <motion.div

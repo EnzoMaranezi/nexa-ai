@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { aiErrorMessage } from "@/lib/ai-errors";
 import type { StudySummary } from "@/lib/summary.schema";
 import { GeneratedContentLanguageState } from "@/components/app/GeneratedContentLanguageState";
+import { AiGenerationProgress } from "@/components/app/AiGenerationProgress";
 import type { PersistedContentLocale } from "@/lib/i18n";
 
 interface Props {
@@ -151,11 +152,7 @@ export function DocumentSummaryPanel({ documentId, documentTitle, topicId }: Pro
         </p>
       )}
 
-      {loading && !summary && (
-        <p className="mt-6 font-mono text-xs text-muted-foreground" aria-live="polite">
-          {t(topicId ? "topics.summaryReading" : "summary.reading")}
-        </p>
-      )}
+      {loading ? <AiGenerationProgress type="summary" /> : null}
 
       {summary && (
         <motion.div

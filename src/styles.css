@@ -223,6 +223,19 @@
   animation: pulse-dot 2.4s ease-in-out infinite;
 }
 
+@keyframes ai-generation-indeterminate {
+  from {
+    transform: translateX(-140%);
+  }
+  to {
+    transform: translateX(360%);
+  }
+}
+
+@utility animate-ai-generation-progress {
+  animation: ai-generation-indeterminate 1.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

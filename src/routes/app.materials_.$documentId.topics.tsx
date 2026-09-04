@@ -18,6 +18,7 @@ import {
   type StoredDocumentTopic,
 } from "@/lib/document-topics.functions";
 import { useI18n } from "@/lib/i18n";
+import { AiGenerationProgress } from "@/components/app/AiGenerationProgress";
 
 export const Route = createFileRoute("/app/materials_/$documentId/topics")({
   component: DocumentTopicsPage,
@@ -170,6 +171,7 @@ function DocumentTopicsPage() {
                 {generating ? t("topics.analyzing") : t("topics.analyze")}
                 <span aria-hidden>→</span>
               </PrimaryButton>
+              {generating ? <AiGenerationProgress type="topics" waiting={waiting} className="text-left" /> : null}
             </AppCard>
           ) : (
             <AppCard className="border-dashed">

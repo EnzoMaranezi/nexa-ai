@@ -8,6 +8,7 @@ import { aiErrorMessage } from "@/lib/ai-errors";
 import { useI18n } from "@/lib/i18n";
 import type { PersistedContentLocale } from "@/lib/i18n";
 import { GeneratedContentLanguageState } from "@/components/app/GeneratedContentLanguageState";
+import { AiGenerationProgress } from "@/components/app/AiGenerationProgress";
 
 type FlashcardMode = "review" | "browse";
 
@@ -181,7 +182,7 @@ export function DocumentFlashcardsPanel({ documentId, topicId }: { documentId: s
         void refreshReviewQueue(variant.id).catch(() => undefined);
       }}
     /> : null}
-    {generating && !cards ? <p className="mt-6 font-mono text-xs text-muted-foreground" aria-live="polite">{t("flashcards.reading")}</p> : null}
+    {generating ? <AiGenerationProgress type="flashcards" /> : null}
     {error ? <p role="alert" className="mt-5 flex gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm"><AlertCircle className="size-4 shrink-0 text-destructive" />{error}</p> : null}
     {notice ? <p role="status" className="mt-5 font-mono text-xs text-lime">{notice}</p> : null}
     {checking ? <div className="mt-6 space-y-3"><Skeleton className="w-1/3" /><Skeleton className="w-full" /></div> : null}

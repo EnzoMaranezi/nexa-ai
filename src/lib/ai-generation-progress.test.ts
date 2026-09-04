@@ -56,6 +56,34 @@ test("the progress timer rotates stages, stops at the final stage, and cleans up
   assert.equal(clearCalls, 1);
 });
 
+test("the default timer adapter keeps native browser timer methods bound to globalThis", () => {
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let tick: (() => void) | undefined;
+  let clearCalls = 0;
+
+  globalThis.setInterval = function (this: typeof globalThis, callback: () => void) {
+    assert.equal(this, globalThis);
+    tick = callback;
+    return 1 as unknown as ReturnType<typeof setInterval>;
+  } as typeof globalThis.setInterval;
+  globalThis.clearInterval = function (this: typeof globalThis, timer: ReturnType<typeof setInterval>) {
+    assert.equal(this, globalThis);
+    assert.equal(timer, 1);
+    clearCalls += 1;
+  } as typeof globalThis.clearInterval;
+
+  try {
+    const stop = startAiGenerationProgress("summary", () => {});
+    tick?.();
+    stop();
+    assert.equal(clearCalls, 1);
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+  }
+});
+
 test("the shared UI is indeterminate and distinguishes waiting from provider progress", () => {
   assert.match(componentSource, /role="progressbar"/);
   assert.doesNotMatch(componentSource, /aria-valuenow|aria-valuemin|aria-valuemax/);

@@ -51,11 +51,17 @@ type TimerApi = {
   clearInterval: (timer: ProgressTimer) => void;
 };
 
+// Keep browser timer methods bound to their global receiver.
+const defaultTimers: TimerApi = {
+  setInterval: (callback, delay) => globalThis.setInterval(callback, delay),
+  clearInterval: (timer) => globalThis.clearInterval(timer),
+};
+
 /** Starts at once and stops once the final truthful status is visible. */
 export function startAiGenerationProgress(
   type: AiGenerationType,
   onStage: (stageIndex: number) => void,
-  timers: TimerApi = { setInterval, clearInterval },
+  timers: TimerApi = defaultTimers,
 ) {
   const finalStage = aiGenerationStageKeys[type].length - 1;
   let stageIndex = 0;

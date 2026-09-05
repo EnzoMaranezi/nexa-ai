@@ -4,7 +4,9 @@ Plataforma de estudos com IA que transforma materiais acadêmicos em resumos, qu
 
 **Status: Beta - v0.1.0**
 
-[Acessar a aplicação](https://nexaai-gamma.vercel.app)
+[Acessar a aplicação pública atual](https://nexaai-gamma.vercel.app)
+
+O link acima aponta para o deployment público atual do NEXA. Forks e instalações locais devem configurar sua própria URL e infraestrutura.
 
 ## Sobre o NEXA
 
@@ -13,31 +15,46 @@ O NEXA organiza materiais acadêmicos em uma experiência de estudo contínua. D
 ## Funcionalidades
 
 - Autenticação, recuperação de senha e rotas protegidas com Supabase Auth.
-- Upload e extração de texto de arquivos PDF.
-- Materiais persistentes criados a partir de texto colado.
-- Resumos contextuais gerados por IA.
-- Questões de múltipla escolha vinculadas ao material.
-- Prática direcionada aos erros anteriores (Practice My Mistakes).
-- Flashcards persistentes com modo de estudo e navegação.
-- Revisão espaçada determinística com avaliações Errei, Difícil, Bom e Fácil.
-- Overview com contagem e recomendação de revisões pendentes.
-- Sessões de estudo, histórico de desempenho e progresso real.
-- Interface e conteúdo gerado persistente em português brasileiro e inglês.
-- Limite diário de gerações de IA por usuário.
-- Cache por material e idioma para evitar gerações desnecessárias.
+- Upload de PDF e materiais persistentes a partir de notas coladas.
+- Resumo, questões e flashcards para o material completo.
+- Practice My Mistakes para praticar erros anteriores.
+- Flashcards com revisão espaçada e histórico de revisões.
+- Study by Topics: descoberta de tópicos e conteúdo independente por tópico.
+- Resumo, questões, prática e flashcards por tópico.
+- Overview, Progress e histórico de Study Sessions com dados reais.
+- Interface e conteúdo gerado em português brasileiro e inglês.
+- Feedback de progresso para gerações de IA de longa duração.
 
 ## Como funciona
 
 ```text
 Material
   -> processamento
-  -> resumo
-  -> questões / flashcards
-  -> sessões / revisão
-  -> progresso
+  -> estudo do material completo
+       -> resumo
+       -> questões
+       -> flashcards
+  -> estudo por tópicos
+       -> resumo do tópico
+       -> questões do tópico
+       -> flashcards do tópico
+
+Questões
+  -> Study Sessions
+  -> Practice My Mistakes
+
+Flashcards
+  -> revisão espaçada
+
+Toda atividade de estudo
+  -> Overview / Progress / Study Sessions
 ```
 
-O material enviado é a fonte de verdade para o conteúdo gerado. Resumos, questões e flashcards existentes são reutilizados quando possível.
+O processamento prepara o material e identifica sua estrutura; ele não gera perguntas. O material persistido é a fonte de verdade para o conteúdo gerado. Resumos, questões e flashcards existentes são reutilizados quando possível.
+
+## Study by Topics
+
+O NEXA descobre tópicos a partir do conteúdo persistido do material e mantém cada tópico vinculado aos seus intervalos de fonte. Cada tópico pode ter seu próprio resumo, questões, prática de erros e flashcards, sem se misturar ao conteúdo do material completo. Conteúdo já gerado e salvo é reutilizado pelo escopo e idioma, sem consumir uma nova geração de IA.
 
 ## Arquitetura
 
@@ -59,13 +76,21 @@ O material enviado é a fonte de verdade para o conteúdo gerado. Resumos, quest
 
 ### IA
 
-- NVIDIA NIM como provedor principal.
-- OpenRouter como fallback.
-- Gateway centralizado para seleção e normalização dos provedores.
-- Uma única reserva de quota por ação do usuário, independentemente de fallback.
+- NVIDIA NIM `openai/gpt-oss-20b` como provedor principal.
+- NVIDIA NIM `openai/gpt-oss-120b` como fallback secundário.
+- Um modelo OpenRouter configurado como fallback final.
+- O gateway centralizado executa a seleção e o fallback apenas no servidor; o navegador não chama provedores diretamente.
+- Chaves dos provedores permanecem somente no servidor.
+- Uma única reserva de quota por ação do usuário, mesmo quando há tentativa de fallback.
 - Prompts e parsers próprios para conteúdo acadêmico em Markdown.
 
 O agendamento dos flashcards é determinístico e executado no servidor. Ele foi projetado para oferecer intervalos previsíveis no Beta, sem afirmar eficácia científica além do comportamento implementado.
+
+### Quota e feedback de geração
+
+Cada usuário pode executar até 20 gerações de IA por dia UTC. Conteúdo em cache ou já persistido não consome uma nova geração, e todas as tentativas de fallback fazem parte da mesma ação reservada.
+
+Durante gerações longas, o NEXA mostra uma barra indeterminada com mensagens de status localizadas e rotativas. Não há porcentagem artificial: o resultado substitui o feedback somente quando a resposta real do servidor é concluída.
 
 ## Segurança
 
@@ -78,7 +103,7 @@ O agendamento dos flashcards é determinístico e executado no servidor. Ele foi
 
 ## Internacionalização
 
-O NEXA oferece interface em português brasileiro (`pt-BR`) e inglês (`en`). Resumos, conjuntos de questões e flashcards são persistidos separadamente por idioma. Alterar o idioma não regenera conteúdo nem consome quota automaticamente.
+O NEXA oferece interface em português brasileiro (`pt-BR`) e inglês (`en`). Resumos, conjuntos de questões e flashcards de materiais e tópicos são persistidos separadamente por idioma. Alterar o idioma não regenera conteúdo nem consome quota automaticamente.
 
 ## Rodando localmente
 
@@ -109,12 +134,16 @@ Copy-Item .env.example .env
 
 Execute as migrações em ordem:
 
-1. `0001_initial_schema.sql`
-2. `0002_allow_text_materials.sql`
-3. `0003_ai_generation_rate_limits.sql`
-4. `0004_flashcards.sql`
-5. `0005_flashcard_spaced_repetition.sql`
-6. `0006_multilingual_generated_content.sql`
+1. `0001_initial_schema.sql`: documentos, conteúdo inicial, Storage e RLS.
+2. `0002_allow_text_materials.sql`: materiais somente de texto colado.
+3. `0003_ai_generation_rate_limits.sql`: quota diária e reservas de geração.
+4. `0004_flashcards.sql`: conjuntos e cartões persistentes.
+5. `0005_flashcard_spaced_repetition.sql`: agendamento e histórico de revisões.
+6. `0006_multilingual_generated_content.sql`: conteúdo gerado separado por idioma.
+7. `0007_document_topics.sql`: tópicos vinculados a intervalos da fonte.
+8. `0008_topic_generated_content.sql`: resumos no escopo de tópicos.
+9. `0009_topic_questions.sql`: questões e prática no escopo de tópicos.
+10. `0010_topic_flashcards.sql`: flashcards no escopo de tópicos.
 
 Consulte [`supabase/README.md`](supabase/README.md) para configurar Auth, Storage, SMTP e URLs de redirecionamento.
 
@@ -132,13 +161,14 @@ Scripts definidos em `package.json`:
 - `npm run build`: cria o build de produção.
 - `npm run build:dev`: cria um build em modo de desenvolvimento.
 - `npm run preview`: executa o preview do build.
+- `npm test`: executa toda a suíte de testes TypeScript atual.
 - `npm run lint`: executa o ESLint.
 - `npm run format`: formata o projeto com Prettier.
 
-Os testes unitários atuais podem ser executados com:
+Execute toda a suíte de testes com:
 
 ```bash
-node --test --experimental-strip-types src/lib/*.test.ts
+npm test
 ```
 
 ## Estrutura do projeto

@@ -1,7 +1,6 @@
 import { SITE, NAV_LINKS } from "@/data/site";
 import { useI18n } from "@/lib/i18n";
 
-const SOCIAL = ["X", "Instagram", "LinkedIn", "Discord"];
 const NAV_LABEL_KEYS = [
   "landing.nav.product",
   "landing.nav.how",
@@ -40,21 +39,6 @@ export function Footer() {
             </ul>
           </nav>
 
-          <div className="md:col-span-3">
-            <p className="label-mono">{t("landing.social")}</p>
-            <ul className="mt-5 space-y-2.5">
-              {SOCIAL.map((s) => (
-                <li key={s}>
-                  <a
-                    href="#top"
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {s}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
 
         <div className="mt-16 flex flex-col gap-3 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">

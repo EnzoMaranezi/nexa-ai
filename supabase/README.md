@@ -24,8 +24,14 @@ As migrações devem ser aplicadas na ordem numérica:
 4. `0004_flashcards.sql`: conjuntos e cartões persistentes.
 5. `0005_flashcard_spaced_repetition.sql`: agendamento e histórico de revisões.
 6. `0006_multilingual_generated_content.sql`: conteúdo persistente separado por idioma.
+7. `0007_document_topics.sql`: tópicos descobertos a partir de intervalos persistidos do material.
+8. `0008_topic_generated_content.sql`: resumos por tópico e escopo de geração correspondente.
+9. `0009_topic_questions.sql`: conjuntos, sessões e prática de questões por tópico.
+10. `0010_topic_flashcards.sql`: conjuntos de flashcards por tópico.
 
 Não pule migrações e não altere a ordem em um projeto vazio.
+
+As migrações também configuram geração multilíngue persistida, reservas de geração de IA com limite diário, conteúdo de tópicos e políticas RLS. O acesso do aplicativo é autenticado e isolado por usuário; as escritas sensíveis ocorrem pelas RPCs aprovadas, não por acesso direto do cliente às tabelas de geração.
 
 ## Configurar autenticação
 
